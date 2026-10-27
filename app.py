@@ -176,3 +176,66 @@ async def ejecutar_auditoria_completa(url):
         return {
             "default": {"cookies": c_def, "pings": p_def},
             "reject": {"cookies": c_rej, "pings": p_rej, "action": act_rej},
+            "accept": {"cookies": c_acc, "pings": p_acc, "action": act_acc}
+        }
+
+if st.button("🚀 Iniciar Auditoría Completa", type="primary", use_container_width=True):
+    if not target_url.startswith("http"):
+        st.error("Introduce una URL válida que empiece por https:// o http://")
+    else:
+        domain = urlparse(target_url).netloc
+        with st.spinner(f"Analizando {domain}: ejecutando pruebas de Default, Rechazar y Aceptar..."):
+            try:
+                data = asyncio.run(ejecutar_auditoria_completa(target_url))
+                st.success(f"¡Auditoría finalizada para {domain}!")
+                
+                t1, t2, t3 = st.tabs(["📊 Consent Mode v2", "🍪 Inventario de Cookies", "📄 Informe Word"])
+                
+                with t1:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown("#### 1. Previo (Default)")
+                        if data['default']['pings']:
+                            p1 = extract_consent_params(data['default']['pings'][0])
+                            st.metric("GCS", p1['gcs'])
+                            st.write(f"**GCD:** `{p1['gcd']}`")
+                            st.write(f"**NPA:** `{p1['npa']}` | **DMA:** `{p1['dma']}`")
+                        else:
+                            st.info("Sin pings previos detectados.")
+                    with col2:
+                        st.markdown("#### 2. Rechazar Todas")
+                        st.caption(f"Acción: {data['reject']['action']}")
+                        if data['reject']['pings']:
+                            p2 = extract_consent_params(data['reject']['pings'][-1])
+                            st.metric("GCS", p2['gcs'])
+                            st.write(f"**GCD:** `{p2['gcd']}`")
+                            st.write(f"**NPA:** `{p2['npa']}` | **DMA:** `{p2['dma']}`")
+                        else:
+                            st.info("Sin pings tras rechazo.")
+                    with col3:
+                        st.markdown("#### 3. Aceptar Todas")
+                        st.caption(f"Acción: {data['accept']['action']}")
+                        if data['accept']['pings']:
+                            p3 = extract_consent_params(data['accept']['pings'][-1])
+                            st.metric("GCS", p3['gcs'])
+                            st.write(f"**GCD:** `{p3['gcd']}`")
+                            st.write(f"**NPA:** `{p3['npa']}` | **DMA:** `{p3['dma']}`")
+                        else:
+                            st.info("Sin pings tras aceptación.")
+                
+                with t2:
+                    st.write(f"**Cookies en aterrizaje inicial ({len(data['default']['cookies'])}):**")
+                    st.dataframe([{"Nombre": c['name'], "Dominio": c['domain'], "Expiración": c['expires']} for c in data['default']['cookies']], use_container_width=True)
+                
+                with t3:
+                    doc_bytes = generar_documento_auditoria(domain, data)
+                    nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
+                    st.download_button(
+                        label=f"📥 Descargar: {nombre_archivo}",
+                        data=doc_bytes,
+                        file_name=nombre_archivo,
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        type="primary"
+                    )
+            except Exception as e:
+                st.error(f"Error durante la auditoría: {e}")

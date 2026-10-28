@@ -154,41 +154,65 @@ def ensure_playwright():
 
 ensure_playwright()
 
-# Base de firmas de cookies conocidas para auditoría técnica
-KNOWN_COOKIES = {
-    "_ga": ("Google Analytics", "Analítica / Rendimiento"),
-    "_gid": ("Google Analytics", "Analítica / Rendimiento"),
-    "_gat": ("Google Analytics", "Analítica / Rendimiento"),
-    "pk_id": ("Matomo / Piwik", "Analítica / Rendimiento"),
-    "pk_ses": ("Matomo / Piwik", "Analítica / Rendimiento"),
-    "_clck": ("Microsoft Clarity", "Analítica / Rendimiento"),
-    "_clsk": ("Microsoft Clarity", "Analítica / Rendimiento"),
-    "_hj": ("Hotjar", "Analítica / Rendimiento"),
-    "_fbp": ("Meta Pixel (Facebook)", "Marketing / Publicidad"),
-    "_fbc": ("Meta Pixel (Facebook)", "Marketing / Publicidad"),
-    "fr": ("Meta / Facebook", "Marketing / Publicidad"),
+# === CATÁLOGO CANÓNICO DE FIRMAS DE COOKIES ===
+EXACT_COOKIES = {
+    "sessionid": ("Framework Django / Python (Sesión de usuario)", "Técnica / Necesaria"),
+    "django_language": ("Framework Django (Preferencia de idioma)", "Técnica / Necesaria"),
+    "csrftoken": ("Seguridad Web (Protección CSRF)", "Técnica / Necesaria"),
+    "phpsessid": ("Servidor PHP (Sesión nativa)", "Técnica / Necesaria"),
+    "jsessionid": ("Servidor Java / Spring (Sesión)", "Técnica / Necesaria"),
+    "asp.net_sessionid": ("Servidor ASP.NET (Sesión)", "Técnica / Necesaria"),
+    "nid": ("Google LLC (Perfil publicitario)", "Marketing / Publicidad"),
+    "fr": ("Meta Pixel (Facebook)", "Marketing / Publicidad"),
     "ide": ("Google DoubleClick", "Marketing / Publicidad"),
     "test_cookie": ("Google DoubleClick", "Marketing / Publicidad"),
-    "__gads": ("Google Ad Manager", "Marketing / Publicidad"),
-    "__gpi": ("Google Ad Manager", "Marketing / Publicidad"),
-    "_gcl_au": ("Google AdSense / Conversion", "Marketing / Publicidad"),
-    "_gcl_aw": ("Google Ads", "Marketing / Publicidad"),
-    "_gcl_dc": ("Google Ads DoubleClick", "Marketing / Publicidad"),
-    "nid": ("Google LLC", "Marketing / Publicidad"),
-    "muid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
-    "_uetsid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
-    "_uetvid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
-    "tt_webid": ("TikTok Pixel", "Marketing / Publicidad"),
-    "cto_bundle": ("Criteo", "Marketing / Publicidad"),
+    "muid": ("Microsoft Advertising (Bing)", "Marketing / Publicidad"),
     "cookiescriptconsent": ("CookieScript (CMP)", "Técnica / Necesaria"),
     "optanonconsent": ("OneTrust (CMP)", "Técnica / Necesaria"),
-    "cookieconsent": ("CMP / Consent", "Técnica / Necesaria"),
+    "optanonalertboxclosed": ("OneTrust (CMP)", "Técnica / Necesaria"),
+    "cookieyes-consent": ("CookieYes (CMP)", "Técnica / Necesaria"),
+    "cookieconsent_status": ("Cookie Consent (CMP)", "Técnica / Necesaria"),
     "didomi_token": ("Didomi (CMP)", "Técnica / Necesaria"),
-    "phpsessid": ("Servidor Web (PHP)", "Técnica / Necesaria"),
-    "jsessionid": ("Servidor Web (Java)", "Técnica / Necesaria"),
-    "aspsessionid": ("Servidor Web (ASP.NET)", "Técnica / Necesaria"),
-    "csrftoken": ("Seguridad CSRF", "Técnica / Necesaria")
+    "cf_clearance": ("Cloudflare (Seguridad anti-DDoS)", "Técnica / Necesaria"),
+    "__cf_bm": ("Cloudflare (Gestión de bots)", "Técnica / Necesaria")
 }
+
+PREFIX_PATTERNS = [
+    (r'^_ga(_.*)?$', "Google Analytics 4", "Analítica / Rendimiento"),
+    (r'^_gid$', "Google Analytics (Universal)", "Analítica / Rendimiento"),
+    (r'^_gat(_.*)?$', "Google Analytics (Tasa de peticiones)", "Analítica / Rendimiento"),
+    (r'^_pk_.*|^pk_.*', "Matomo / Piwik", "Analítica / Rendimiento"),
+    (r'^_clck$|^_clsk$', "Microsoft Clarity", "Analítica / Rendimiento"),
+    (r'^_hj.*', "Hotjar (Mapas de calor)", "Analítica / Rendimiento"),
+    (r'^_fbp$|^_fbc$', "Meta Pixel (Facebook)", "Marketing / Publicidad"),
+    (r'^__gads$|^__gpi$', "Google Ad Manager", "Marketing / Publicidad"),
+    (r'^_gcl_.*|^_gac_.*', "Google Ads (Conversión)", "Marketing / Publicidad"),
+    (r'^_uet.*', "Microsoft Bing Ads", "Marketing / Publicidad"),
+    (r'^tt_.*', "TikTok Pixel", "Marketing / Publicidad"),
+    (r'^cto_.*', "Criteo (Retargeting)", "Marketing / Publicidad"),
+    (r'^wp-.*|^wordpress_.*', "WordPress CMS", "Técnica / Necesaria"),
+    (r'^woocommerce_.*', "WooCommerce (E-commerce)", "Técnica / Necesaria"),
+    (r'^pll_.*|^icl_.*', "Gestión Multi-idioma", "Técnica / Necesaria"),
+    (r'^aspsessionid.*', "Servidor ASP (Sesión)", "Técnica / Necesaria")
+]
+
+FALLBACK_KEYWORDS = [
+    (r'.*(sess|csrf|token|auth|lang|cart|carrito|pedid|checkout|login|secure|nonce).*', "Propio (Funcional / Sesión)", "Técnica / Necesaria"),
+    (r'.*(analy|stats|metric|hit|pageview|visitor|perf).*', "Herramienta Analítica", "Analítica / Rendimiento"),
+    (r'.*(ad|track|pixel|banner|camp|promo|retarget|conver).*', "Red Publicitaria", "Marketing / Publicidad")
+]
+
+def identificar_cookie(name, domain):
+    n = name.strip().lower()
+    if n in EXACT_COOKIES:
+        return EXACT_COOKIES[n]
+    for regex, prov, cat in PREFIX_PATTERNS:
+        if re.match(regex, n):
+            return prov, cat
+    for regex, prov, cat in FALLBACK_KEYWORDS:
+        if re.search(regex, n):
+            return f"{prov} ({domain})", cat
+    return f"Desconocido ({domain})", "Por categorizar"
 
 def calcular_duracion(expires_unix):
     if not expires_unix or expires_unix == -1 or expires_unix <= 0:
@@ -208,59 +232,59 @@ def calcular_duracion(expires_unix):
         anos = round(dias / 365, 1)
         return "1 año" if anos == 1.0 else f"{anos:g} años"
 
-def enriquecer_cookie(cookie, phase_key):
+def enriquecer_cookie(cookie, phase_key, baseline_names, analytics_new, marketing_new):
     name = cookie.get('name', '')
     domain = cookie.get('domain', '')
     expires = cookie.get('expires', -1)
     duracion = calcular_duracion(expires)
     
-    name_clean = name.lower().replace('-', '_')
-    prov = f"Propio ({domain})"
-    cat_recomendada = "Técnica / Necesaria"
+    prov, cat_recomendada = identificar_cookie(name, domain)
+    is_in_baseline = name in baseline_names
     
-    matched = False
-    for pattern, (p_name, p_cat) in KNOWN_COOKIES.items():
-        if pattern in name_clean:
-            prov = p_name
-            cat_recomendada = p_cat
-            matched = True
-            break
-            
-    if not matched:
-        if any(k in name_clean for k in ['sess', 'csrf', 'token', 'auth', 'lang', 'cart']):
-            prov = f"Propio ({domain})"
-            cat_recomendada = "Técnica / Necesaria"
-        elif any(k in name_clean for k in ['ad', 'track', 'pixel', 'banner']):
-            prov = "Tercero publicitario"
-            cat_recomendada = "Marketing / Publicidad"
+    # Determinación precisa mediante cotejo diferencial
+    if is_in_baseline:
+        if phase_key in ['default', 'reject']:
+            cat_web = "Técnica / Exenta (Carga Previa)"
         else:
-            cat_recomendada = "Por categorizar"
-
-    # Categorización asignada por la web según el momento en que se inyecta
-    if phase_key in ['default', 'reject']:
-        cat_web = "Técnica / Exenta (Disparada sin consentimiento)"
-    elif phase_key == 'analytics':
-        cat_web = "Analítica / Rendimiento"
-    elif phase_key == 'marketing':
-        cat_web = "Marketing / Publicidad"
+            cat_web = "Técnica / Exenta (Base persistente)"
     else:
-        cat_web = "Consentimiento Global"
+        if name in analytics_new:
+            cat_web = "Analítica / Rendimiento (Inyectada al consentir)"
+        elif name in marketing_new:
+            cat_web = "Marketing / Publicidad (Inyectada al consentir)"
+        elif phase_key == 'accept':
+            cat_web = "Consentimiento Global (Inyectada tras Aceptar)"
+        else:
+            cat_web = "No clasificada (Inyección anómala)"
 
     # Diagnóstico legal de conformidad
     if phase_key in ['default', 'reject']:
         if "Analítica" in cat_recomendada or "Marketing" in cat_recomendada:
             diagnostico = "❌ Infracción (Fuga sin consentimiento)"
         elif cat_recomendada == "Por categorizar":
-            diagnostico = "⚠️ Por revisar"
+            diagnostico = "⚠️ Por verificar"
         else:
-            diagnostico = "✅ Correcto (Técnica)"
+            diagnostico = "✅ Conforme (Técnica autorizada)"
     elif phase_key == 'analytics':
         if "Marketing" in cat_recomendada:
-            diagnostico = "❌ Infracción (Publicidad en Analítica)"
+            diagnostico = "❌ Infracción (Marketing en Solo Analítica)"
+        elif "Analítica" in cat_recomendada:
+            diagnostico = "✅ Conforme (Analítica autorizada)"
+        elif "Técnica" in cat_recomendada:
+            diagnostico = "✅ Conforme (Técnica base)"
         else:
-            diagnostico = "✅ Correcto"
+            diagnostico = "⚠️ Por verificar"
+    elif phase_key == 'marketing':
+        if "Analítica" in cat_recomendada:
+            diagnostico = "❌ Infracción (Analítica en Solo Marketing)"
+        elif "Marketing" in cat_recomendada:
+            diagnostico = "✅ Conforme (Marketing autorizado)"
+        elif "Técnica" in cat_recomendada:
+            diagnostico = "✅ Conforme (Técnica base)"
+        else:
+            diagnostico = "⚠️ Por verificar"
     else:
-        diagnostico = "✅ Autorizada"
+        diagnostico = "✅ Conforme (Consentimiento global)"
 
     return {
         "Nombre": name,
@@ -358,66 +382,128 @@ def extract_consent_params(pings):
 async def interactuar_con_cmp(page, target_action):
     js_action = """
     async (mode) => {
+        // === 1. APIS NATIVAS ===
         if (window.CookieScript && window.CookieScript.instance) {
             try {
-                if (mode === 'accept') {
-                    window.CookieScript.instance.acceptAllAction();
-                    return "CookieScript API: acceptAllAction()";
-                } else if (mode === 'reject') {
-                    window.CookieScript.instance.rejectAllAction();
-                    return "CookieScript API: rejectAllAction()";
-                } else if (mode === 'only_analytics') {
-                    window.CookieScript.instance.acceptAction(['performance']);
-                    return "CookieScript API: acceptAction(['performance'])";
-                } else if (mode === 'only_marketing') {
-                    window.CookieScript.instance.acceptAction(['targeting']);
-                    return "CookieScript API: acceptAction(['targeting'])";
-                }
-            } catch (err) {
-                console.error(err);
-            }
+                if (mode === 'accept') { window.CookieScript.instance.acceptAllAction(); return "API CookieScript: acceptAllAction"; }
+                if (mode === 'reject') { window.CookieScript.instance.rejectAllAction(); return "API CookieScript: rejectAllAction"; }
+                if (mode === 'only_analytics') { window.CookieScript.instance.acceptAction(['performance']); return "API CookieScript: performance"; }
+                if (mode === 'only_marketing') { window.CookieScript.instance.acceptAction(['targeting']); return "API CookieScript: targeting"; }
+            } catch(e) {}
+        }
+        if (window.OneTrust) {
+            try {
+                if (mode === 'accept' && window.OneTrust.AllowAll) { window.OneTrust.AllowAll(); return "API OneTrust: AllowAll"; }
+                if (mode === 'reject' && window.OneTrust.RejectAll) { window.OneTrust.RejectAll(); return "API OneTrust: RejectAll"; }
+            } catch(e) {}
+        }
+        if (window.Didomi) {
+            try {
+                if (mode === 'accept' && window.Didomi.setUserAgreeToAll) { window.Didomi.setUserAgreeToAll(); return "API Didomi: setUserAgreeToAll"; }
+                if (mode === 'reject' && window.Didomi.setUserDisagreeToAll) { window.Didomi.setUserDisagreeToAll(); return "API Didomi: setUserDisagreeToAll"; }
+            } catch(e) {}
         }
 
+        // === 2. BOTONES DIRECTOS (CAPA 1) ===
         if (mode === 'accept') {
-            const acceptSelectors = ['#cookiescript_accept', '#onetrust-accept-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll', '#didomi-notice-agree-button'];
+            const acceptSelectors = [
+                '#cookiescript_accept',
+                '#onetrust-accept-btn-handler',
+                '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll', '#CybotCookiebotDialogBodyButtonAccept',
+                '.cky-btn-accept', '[data-cky-tag="accept-button"]',
+                '#didomi-notice-agree-button',
+                'button[data-testid="uc-accept-all-button"]',
+                '.iubenda-cs-accept-btn',
+                '#axeptio_btn_acceptAll'
+            ];
             for (let s of acceptSelectors) {
                 let el = document.querySelector(s);
                 if (el && el.offsetParent !== null) { el.click(); return "Selector: " + s; }
             }
             for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
                 let t = (b.innerText || b.value || '').trim().toLowerCase();
-                if (['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar'].some(term => t === term || t.includes(term))) {
-                    b.click();
-                    return "Texto: " + t;
+                if (['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar', 'accept', 'allow all'].some(term => t === term || t.includes(term))) {
+                    b.click(); return "Texto: " + t;
                 }
             }
         }
 
         if (mode === 'reject') {
-            const rejectSelectors = ['#cookiescript_reject', '#onetrust-reject-all-handler', '#CybotCookiebotDialogBodyButtonDecline', '#didomi-notice-disagree-button'];
+            const rejectSelectors = [
+                '#cookiescript_reject',
+                '#onetrust-reject-all-handler',
+                '#CybotCookiebotDialogBodyButtonDecline', '#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll',
+                '.cky-btn-reject', '[data-cky-tag="reject-button"]',
+                '#didomi-notice-disagree-button',
+                'button[data-testid="uc-deny-all-button"]',
+                '.iubenda-cs-reject-btn',
+                '#axeptio_btn_refuse'
+            ];
             for (let s of rejectSelectors) {
                 let el = document.querySelector(s);
                 if (el && el.offsetParent !== null) { el.click(); return "Selector: " + s; }
             }
             for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
                 let t = (b.innerText || b.value || '').trim().toLowerCase();
-                if (['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar'].some(term => t === term || t.includes(term))) {
-                    b.click();
-                    return "Texto: " + t;
+                if (['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar', 'reject', 'decline all', 'solo necesarias'].some(term => t === term || t.includes(term))) {
+                    b.click(); return "Texto: " + t;
                 }
             }
         }
 
-        const openManageSelectors = ['#cookiescript_manage', '#onetrust-pc-btn-handler', '#CybotCookiebotDialogBodyLevelButtonCustomize', '#didomi-notice-learn-more-button'];
+        // === 3. SEGUNDA CAPA (GRANULAR: ANALYTICS / MARKETING) ===
+        const openManageSelectors = [
+            '#cookiescript_manage',
+            '#onetrust-pc-btn-handler',
+            '#CybotCookiebotDialogBodyLevelButtonCustomize',
+            '.cky-btn-customize', '[data-cky-tag="settings-button"]',
+            '#didomi-notice-learn-more-button',
+            '.iubenda-cs-customize-btn'
+        ];
+        let panelOpened = false;
         for (let s of openManageSelectors) {
             let el = document.querySelector(s);
-            if (el && el.offsetParent !== null) { el.click(); break; }
+            if (el && el.offsetParent !== null) { el.click(); panelOpened = true; break; }
         }
-        await new Promise(r => setTimeout(r, 900));
+        if (!panelOpened) {
+            for (let b of Array.from(document.querySelectorAll('button, a, span'))) {
+                let t = (b.innerText || '').trim().toLowerCase();
+                if (['personalizar', 'configurar', 'preferencias', 'customize', 'settings', 'manage cookies'].some(term => t.includes(term))) {
+                    b.click(); break;
+                }
+            }
+        }
+        await new Promise(r => setTimeout(r, 1000));
 
+        // Cookiebot
+        let cbStat = document.querySelector('#CybotCookiebotDialogBodyLevelButtonStatistics');
+        let cbMkt = document.querySelector('#CybotCookiebotDialogBodyLevelButtonMarketing');
+        if (cbStat && cbMkt) {
+            if (mode === 'only_analytics') {
+                if (!cbStat.checked) cbStat.click();
+                if (cbMkt.checked) cbMkt.click();
+            } else if (mode === 'only_marketing') {
+                if (cbStat.checked) cbStat.click();
+                if (!cbMkt.checked) cbMkt.click();
+            }
+        }
+
+        // CookieYes
+        let ckyAna = document.querySelector('input[data-cky-tag="analytics"], .cky-category-analytics input, [data-cky-tag="analytics-switch"]');
+        let ckyAdv = document.querySelector('input[data-cky-tag="advertisement"], .cky-category-advertisement input, [data-cky-tag="advertisement-switch"]');
+        if (ckyAna || ckyAdv) {
+            if (mode === 'only_analytics') {
+                if (ckyAna && !ckyAna.checked) ckyAna.click();
+                if (ckyAdv && ckyAdv.checked) ckyAdv.click();
+            } else if (mode === 'only_marketing') {
+                if (ckyAna && ckyAna.checked) ckyAna.click();
+                if (ckyAdv && !ckyAdv.checked) ckyAdv.click();
+            }
+        }
+
+        // CookieScript & OneTrust
         let perfInput = document.querySelector('#cookiescript_category_performance, input[id*="ot-group-id-C0002"]');
         let targetInput = document.querySelector('#cookiescript_category_targeting, input[id*="ot-group-id-C0004"]');
-        
         if (perfInput || targetInput) {
             if (mode === 'only_analytics') {
                 if (perfInput && !perfInput.checked) perfInput.click();
@@ -430,16 +516,22 @@ async def interactuar_con_cmp(page, target_action):
 
         await new Promise(r => setTimeout(r, 600));
 
-        const saveSelectors = ['#cookiescript_save', '.save-preference-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection'];
+        // Guardar selección
+        const saveSelectors = [
+            '#cookiescript_save',
+            '.save-preference-btn-handler',
+            '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection',
+            '.cky-btn-save', '[data-cky-tag="save-button"]',
+            'button[data-testid="uc-save-button"]'
+        ];
         for (let s of saveSelectors) {
             let el = document.querySelector(s);
             if (el && el.offsetParent !== null) { el.click(); return "Guardado: " + s; }
         }
         for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
             let t = (b.innerText || b.value || '').trim().toLowerCase();
-            if (['guardar selección', 'guardar preferencias', 'guardar', 'save', 'confirmar'].some(term => t.includes(term))) {
-                b.click();
-                return "Guardado: " + t;
+            if (['guardar selección', 'guardar preferencias', 'guardar', 'save', 'confirmar opciones', 'allow selection'].some(term => t.includes(term))) {
+                b.click(); return "Guardado: " + t;
             }
         }
         return "Configuración completada";
@@ -483,7 +575,7 @@ async def auditar_fase(browser, url, action=None):
     await context.close()
     return cookies, pings, action_info
 
-def generar_documento_word(domain, audit_data):
+def generar_documento_word(domain, audit_data, baseline_names, analytics_new, marketing_new):
     doc = Document()
     doc.add_heading('AUDITORÍA TÉCNICA PRIVACY & CONSENT MODE V2', 0)
     doc.add_paragraph('Octubre 2026')
@@ -544,7 +636,7 @@ def generar_documento_word(domain, audit_data):
             chdr[5].text = "Diagnóstico"
             
             for c in cookies:
-                c_info = enriquecer_cookie(c, k)
+                c_info = enriquecer_cookie(c, k, baseline_names, analytics_new, marketing_new)
                 r_cells = c_table.add_row().cells
                 r_cells[0].text = c_info['Nombre']
                 r_cells[1].text = c_info['Proveedor']
@@ -560,9 +652,9 @@ def generar_documento_word(domain, audit_data):
     doc_io.seek(0)
     return doc_io
 
-# Interfaz Streamlit
+# === INTERFAZ STREAMLIT ===
 st.markdown("<h1 style='margin-bottom: 2px;'>🛡️ Privacy & Consent Mode v2 Auditor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense de cookies y señales DMA / Google Consent Mode v2</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense diferencial de cookies y señales DMA / Google Consent Mode v2</p>", unsafe_allow_html=True)
 
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = None
@@ -586,7 +678,7 @@ if btn_start:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
                 
-                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings)...")
+                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings y cookies técnicas)...")
                 c_def, p_def, a_def = await auditar_fase(browser, target_url, action=None)
                 
                 progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas (Verificando bloqueo)...")
@@ -622,6 +714,14 @@ if st.session_state.audit_data:
     data = st.session_state.audit_data
     domain = st.session_state.domain
     st.markdown(f"<div style='margin-bottom: 20px; font-weight: 600; color: #34d399;'>● Auditoría completada para: <span style='color: #f8fafc;'>{domain}</span></div>", unsafe_allow_html=True)
+    
+    # Análisis diferencial de cookies para cotejar cómo las maneja la web
+    def_names = {c['name'] for c in data['default']['cookies']}
+    rej_names = {c['name'] for c in data['reject']['cookies']}
+    baseline_names = def_names.union(rej_names)
+    
+    analytics_new = {c['name'] for c in data['analytics']['cookies']} - baseline_names
+    marketing_new = {c['name'] for c in data['marketing']['cookies']} - baseline_names
     
     t_cm, t_ck, t_doc = st.tabs(["📊 Google Consent Mode v2", "🍪 Cookies por Sección", "📄 Generar Informe Word"])
     
@@ -694,7 +794,7 @@ if st.session_state.audit_data:
         )
 
     with t_ck:
-        st.markdown("<h3 style='margin-bottom: 16px;'>Inventario Forense de Cookies y Diagnóstico Legal</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-bottom: 16px;'>Inventario Forense Diferencial y Diagnóstico Legal</h3>", unsafe_allow_html=True)
         sec_names = {
             "default": "1. Aterrizaje Inicial (Default)",
             "reject": "2. Tras Rechazar Todas",
@@ -705,7 +805,7 @@ if st.session_state.audit_data:
         sel_tab = st.selectbox("Selecciona la casuística a inspeccionar:", list(sec_names.keys()), format_func=lambda x: sec_names[x])
         c_list = data[sel_tab]['cookies']
         
-        enriched_cookies = [enriquecer_cookie(c, sel_tab) for c in c_list]
+        enriched_cookies = [enriquecer_cookie(c, sel_tab, baseline_names, analytics_new, marketing_new) for c in c_list]
         total_infracciones = sum(1 for c in enriched_cookies if "❌" in c['Diagnóstico'])
         
         col_m1, col_m2 = st.columns([1, 4])
@@ -725,9 +825,9 @@ if st.session_state.audit_data:
                     "Nombre": st.column_config.TextColumn("Nombre Cookie", width="medium"),
                     "Proveedor": st.column_config.TextColumn("Proveedor / Origen", width="medium"),
                     "Duración": st.column_config.TextColumn("Duración", width="small"),
-                    "Categoría en Web": st.column_config.TextColumn("Cómo está en Web", width="medium"),
-                    "Categoría Debería Ser": st.column_config.TextColumn("Categoría Recomendada", width="medium"),
-                    "Diagnóstico": st.column_config.TextColumn("Diagnóstico", width="medium"),
+                    "Categoría en Web": st.column_config.TextColumn("Cómo la gestiona la Web", width="medium"),
+                    "Categoría Debería Ser": st.column_config.TextColumn("Categoría Canónica Recomendada", width="medium"),
+                    "Diagnóstico": st.column_config.TextColumn("Diagnóstico Legal", width="medium"),
                 },
                 use_container_width=True,
                 hide_index=True
@@ -738,7 +838,7 @@ if st.session_state.audit_data:
     with t_doc:
         st.markdown("<h3 style='margin-bottom: 16px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
         st.markdown("<p style='color: #94a3b8;'>Exporta el informe en formato Word estructurado con todas las tablas comparativas y el inventario técnico listo para enviar a cliente o adjuntar en auditoría.</p>", unsafe_allow_html=True)
-        doc_bytes = generar_documento_word(domain, data)
+        doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(
             label=f"📥 Descargar Informe Completo (.docx)",

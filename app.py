@@ -126,6 +126,25 @@ h1, h2, h3, h4 {
     margin-bottom: 10px;
 }
 
+/* Sub-paneles para UI/UX compliance */
+.ui-card {
+    background: #0f1626;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.ui-card-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
 /* Banner de Recomendación Estratégica */
 .rec-box {
     background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(2, 132, 199, 0.12) 100%);
@@ -457,7 +476,7 @@ def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, 
     }
 
 # ==============================================================================
-# AUDITORÍA DE IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP
+# AUDITORÍA DE IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP + UI COMPLIANCE AEPD
 # ==============================================================================
 
 def analizar_implementacion_cmp(cmp_data, raw_html):
@@ -467,6 +486,7 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
     cmp_loc = cmp_data.get('cmpLocation', 'No localizado')
     has_consent_script = cmp_data.get('hasConsentDefaultScript', False)
     order = cmp_data.get('order', {})
+    ui_data = cmp_data.get('ui', {})
     
     pos_consent = order.get('posConsent', -1)
     pos_cmp = order.get('posCmp', -1)
@@ -520,6 +540,65 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
     if not orden_items:
         orden_items.append(("ℹ️ Diagnóstico", "#94a3b8", "No se han detectado scripts simultáneos de Consent Mode, CMP y GTM en el HTML base para auditar la secuencia."))
 
+    # === EVALUACIÓN UI/UX COMPLIANCE (MÓDULO 1) ===
+    # 1. Cookie Wall
+    is_wall = ui_data.get('isCookieWall', False)
+    if is_wall:
+        wall_status = "Muro de Cookies Activo (Wall of Cookies)"
+        wall_badge = "⚠️ Bloqueo Activo"
+        wall_color = "#fbbf24"
+        wall_detail = (
+            "El CMP bloquea el scroll o superpone un velo opaco que imposibilita la navegación libre hasta interactuar con el banner. "
+            "Según las directrices de la AEPD, esta práctica no incurre en infracción estricta siempre que permita rechazar y navegar sin degradar las funciones de la web, "
+            "pero se recomienda no imposibilitar la navegación libre al usuario."
+        )
+    else:
+        wall_status = "Navegación Libre (Sin Muro)"
+        wall_badge = "✅ Conforme (Sin Muro)"
+        wall_color = "#34d399"
+        wall_detail = "El banner no impone un bloqueo de scroll ni una capa opaca impenetrable: permite la visualización y navegación libre sin forzar la toma inmediata de decisiones."
+
+    # 2. Equidad de Botones en 1ª Capa (AEPD)
+    has_acc = ui_data.get('hasAcceptFirstLayer', False)
+    has_rej = ui_data.get('hasRejectFirstLayer', False)
+    if has_acc and has_rej:
+        equity_status = "Equidad de Botones en 1ª Capa"
+        equity_badge = "✅ Conforme AEPD"
+        equity_color = "#34d399"
+        equity_detail = "Tanto 'Aceptar todas' como 'Rechazar todas' están disponibles en la primera capa informativa con la misma visibilidad, layout y facilidad de clic."
+    elif has_acc and not has_rej:
+        equity_status = "Falta Botón de Rechazo en 1ª Capa"
+        equity_badge = "❌ Infracción AEPD"
+        equity_color = "#ef4444"
+        equity_detail = "El banner solo ofrece 'Aceptar todas' en la primera capa, forzando al usuario a entrar al Centro de Preferencias para rechazar. La AEPD exige que rechazar sea igual de fácil e inmediato que aceptar."
+    else:
+        equity_status = "Botones No Estandarizados"
+        equity_badge = "ℹ️ Por Revisar"
+        equity_color = "#94a3b8"
+        equity_detail = "No se pudieron identificar de forma automática los botones estándar de acción en la primera capa del CMP."
+
+    # 3. Transparencia de Textos de 1ª Capa
+    checks = ui_data.get('checks', {})
+    text_checks = [
+        ("Mención de cookies propias y de terceros", checks.get('checkThirdParty', False), "Se informa explícitamente del uso de tecnologías de terceros.", "No se identifica mención expresa a terceros en el texto inicial."),
+        ("Finalidades básicas detalladas (analítica y marketing)", checks.get('checkPurposes', False), "Se describen las finalidades básicas de métricas y publicidad personalizada.", "El texto no aclara con suficiencia las finalidades de marketing o rendimiento."),
+        ("Opciones de interacción (Aceptar, Rechazar o Configurar)", checks.get('checkUserAction', False), "Se explican con claridad las opciones del usuario ante el banner.", "No se detallan claramente las tres opciones de interacción del usuario."),
+        ("Enlace accesible a Política de Cookies", checks.get('hasCookiePolicyLink', False), "Se incluye un enlace directo y accesible hacia la Política de Cookies.", "No se detecta un enlace visible hacia la Política de Cookies en la 1ª capa.")
+    ]
+
+    # 4. Enlaces Externos / Derivaciones
+    has_cookiepedia = checks.get('hasCookiepedia', False)
+    if has_cookiepedia:
+        ext_status = "Derivación Externa a Cookiepedia"
+        ext_badge = "⚠️ Derivación Externa"
+        ext_color = "#fbbf24"
+        ext_detail = "El enlace de 'Más información' del banner o panel deriva a cookiepedia.com (OneTrust) en inglés. La AEPD exige enlazar a la Política de Cookies propia del editor en el idioma del usuario."
+    else:
+        ext_status = "Enlaces Internos Corporativos"
+        ext_badge = "✅ Conforme"
+        ext_color = "#34d399"
+        ext_detail = "Los enlaces del banner dirigen hacia políticas internas y dominios propios de la entidad sin derivaciones externas indeseadas."
+
     recomendacion = (
         "La recomendación técnica principal SIEMPRE es centralizar toda la gestión en Google Tag Manager (GTM). "
         "Tanto la integración del CMP como la inicialización y actualización de Google Consent Mode deben articularse "
@@ -535,7 +614,13 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
         "gtm_ids": gtm_ids if gtm_ids else ["No detectado"],
         "cmp_loc": cmp_loc,
         "orden_items": orden_items,
-        "recomendacion": recomendacion
+        "recomendacion": recomendacion,
+        "ui_audit": {
+            "wall": (wall_status, wall_badge, wall_color, wall_detail),
+            "equity": (equity_status, equity_badge, equity_color, equity_detail),
+            "text_checks": text_checks,
+            "external_link": (ext_status, ext_badge, ext_color, ext_detail)
+        }
     }
 
 # ==============================================================================
@@ -903,6 +988,7 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
             raw_html = await page.content()
             js_inspect = """
             () => {
+                // 1. Detección de Scripts y CMP
                 const cmpSignatures = [
                     { name: "CookieScript", global: "CookieScript", pattern: /cdn\\.cookie-script\\.com/i },
                     { name: "OneTrust", global: "OneTrust", pattern: /(cdn\\.cookielaw\\.org|onetrust\\.com)/i },
@@ -966,6 +1052,90 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
                     cmpLocation = document.head.contains(cmpElement) ? "<head>" : "<body>";
                 }
 
+                // 2. Módulo de Auditoría Visual e Interfaz (UI/UX Compliance AEPD)
+                const bannerSelectors = [
+                    '#cookiescript_injected', '#cookiescript_wrapper', '#onetrust-banner-sdk',
+                    '#CybotCookiebotDialog', '.cky-consent-container', '#didomi-notice',
+                    '#uc-central-modal', '#iubenda-cs-banner', 'div[id*="cookie"]', 'div[class*="cookie-banner"]'
+                ];
+                let bannerEl = null;
+                for (let s of bannerSelectors) {
+                    let el = document.querySelector(s);
+                    if (el && el.offsetParent !== null) {
+                        bannerEl = el;
+                        break;
+                    }
+                }
+
+                // 2.1 Cookie Wall
+                const bodyStyle = window.getComputedStyle(document.body);
+                const htmlStyle = window.getComputedStyle(document.documentElement);
+                const isScrollBlocked = bodyStyle.overflow === 'hidden' || htmlStyle.overflow === 'hidden';
+
+                const overlays = Array.from(document.querySelectorAll('div')).filter(el => {
+                    const st = window.getComputedStyle(el);
+                    return (st.position === 'fixed' || st.position === 'absolute') && 
+                           parseInt(st.zIndex || '0') > 100 &&
+                           el.offsetWidth >= window.innerWidth * 0.8 &&
+                           el.offsetHeight >= window.innerHeight * 0.8 &&
+                           el.offsetParent !== null;
+                });
+                const hasBackdrop = overlays.length > 0;
+                const isCookieWall = isScrollBlocked || (hasBackdrop && bannerEl && (bannerEl.contains(overlays[0]) || overlays[0].contains(bannerEl)));
+
+                // 2.2 Equidad de botones en 1ª capa
+                const acceptSelectors = [
+                    '#cookiescript_accept', '#onetrust-accept-btn-handler',
+                    '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll', '#CybotCookiebotDialogBodyButtonAccept',
+                    '.cky-btn-accept', '[data-cky-tag="accept-button"]', '#didomi-notice-agree-button'
+                ];
+                const rejectSelectors = [
+                    '#cookiescript_reject', '#onetrust-reject-all-handler',
+                    '#CybotCookiebotDialogBodyButtonDecline', '#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll',
+                    '.cky-btn-reject', '[data-cky-tag="reject-button"]', '#didomi-notice-disagree-button'
+                ];
+                
+                let btnAccept = null;
+                for (let s of acceptSelectors) {
+                    let el = document.querySelector(s);
+                    if (el && el.offsetParent !== null) { btnAccept = el; break; }
+                }
+                if (!btnAccept) {
+                    btnAccept = Array.from(document.querySelectorAll('button, a')).find(el => 
+                        ['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar'].some(t => (el.innerText || '').toLowerCase().trim() === t)
+                    );
+                }
+
+                let btnReject = null;
+                for (let s of rejectSelectors) {
+                    let el = document.querySelector(s);
+                    if (el && el.offsetParent !== null) { btnReject = el; break; }
+                }
+                if (!btnReject) {
+                    btnReject = Array.from(document.querySelectorAll('button, a')).find(el => 
+                        ['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar'].some(t => (el.innerText || '').toLowerCase().trim() === t)
+                    );
+                }
+
+                const hasAcceptFirstLayer = btnAccept !== null && btnAccept.offsetParent !== null;
+                const hasRejectFirstLayer = btnReject !== null && btnReject.offsetParent !== null;
+
+                // 2.3 Textos y Enlaces del Banner
+                let bannerText = bannerEl ? bannerEl.innerText : (document.body.innerText.substring(0, 600));
+                const txtLower = bannerText.toLowerCase();
+
+                const checkThirdParty = txtLower.includes('tercero') || txtLower.includes('third party') || txtLower.includes('terceros');
+                const checkPurposes = txtLower.includes('finalidad') || txtLower.includes('analítica') || txtLower.includes('analitica') || txtLower.includes('publicidad') || txtLower.includes('marketing') || txtLower.includes('rendimiento');
+                const checkUserAction = txtLower.includes('aceptar') && (txtLower.includes('rechazar') || txtLower.includes('configurar') || txtLower.includes('preferencias'));
+
+                const links = bannerEl ? Array.from(bannerEl.querySelectorAll('a')) : [];
+                const linkList = links.map(a => ({ text: a.innerText.trim(), href: a.href }));
+                
+                const cookiePolicyLink = linkList.find(l => 
+                    l.href.toLowerCase().includes('cookie') || l.text.toLowerCase().includes('cookie') || l.text.toLowerCase().includes('política') || l.text.toLowerCase().includes('politica')
+                );
+                const hasCookiepedia = linkList.some(l => l.href.toLowerCase().includes('cookiepedia.com'));
+
                 return {
                     detectedCmp,
                     cmpScriptSrc,
@@ -977,6 +1147,21 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
                         posCmp,
                         posGtm,
                         totalScripts: scripts.length
+                    },
+                    ui: {
+                        isCookieWall,
+                        isScrollBlocked,
+                        hasBackdrop,
+                        hasAcceptFirstLayer,
+                        hasRejectFirstLayer,
+                        checks: {
+                            checkThirdParty,
+                            checkPurposes,
+                            checkUserAction,
+                            hasCookiePolicyLink: !!cookiePolicyLink,
+                            hasCookiepedia
+                        },
+                        links: linkList
                     }
                 };
             }
@@ -1009,18 +1194,40 @@ def generar_documento_word(domain, audit_data, baseline_names, analytics_new, ma
     doc.add_paragraph('Este informe audita el comportamiento técnico de cookies, la implementación del CMP y el envío de señales bajo Google Consent Mode según las directrices de la AEPD y el RGPD.')
     doc.add_paragraph('Dominio evaluado: ' + domain)
     
-    # 1. Auditoría del CMP
-    doc.add_heading('1.- Implementación del CMP y Contenedores', 1)
+    # 1. Auditoría del CMP y UI/UX
+    doc.add_heading('1.- Implementación del CMP, Interfaz y Contenedores', 1)
+    doc.add_heading('1.1 Detección Técnica y Contenedores GTM', 2)
     doc.add_paragraph(f"- Plataforma CMP detectada: {cmp_audit['detected_cmp']}")
     doc.add_paragraph(f"- Método de implementación: {cmp_audit['metodo']}")
     doc.add_paragraph(f"- Ubicación en el documento: {cmp_audit['cmp_loc']}")
     doc.add_paragraph(f"- Contenedor(es) Google Tag Manager: {', '.join(cmp_audit['gtm_ids'])}")
     
-    doc.add_heading('1.1 Auditoría del orden de carga de scripts en código fuente', 2)
+    # 1.2 Auditoría Visual e Interfaz (Módulo 1)
+    ui_audit = cmp_audit.get('ui_audit', {})
+    doc.add_heading('1.2 Auditoría Visual y de Interfaz del Banner (Cumplimiento AEPD)', 2)
+    
+    wall = ui_audit.get('wall', ('N/D', '', '', ''))
+    doc.add_paragraph(f"- Muro de Cookies (Cookie Wall): {wall[1]}")
+    doc.add_paragraph(f"  Detalle técnico: {wall[3]}")
+    
+    equity = ui_audit.get('equity', ('N/D', '', '', ''))
+    doc.add_paragraph(f"- Equidad de Botones en 1ª Capa: {equity[1]}")
+    doc.add_paragraph(f"  Detalle técnico: {equity[3]}")
+    
+    doc.add_paragraph("- Textos y Transparencia en 1ª Capa Informativa:")
+    for titulo, estado, ok_txt, ko_txt in ui_audit.get('text_checks', []):
+        sym = "[Conforme]" if estado else "[Pendiente de Ajuste]"
+        doc.add_paragraph(f"  • {titulo}: {sym} - {ok_txt if estado else ko_txt}")
+        
+    ext_link = ui_audit.get('external_link', ('N/D', '', '', ''))
+    doc.add_paragraph(f"- Enlaces Externos / Derivaciones: {ext_link[1]}")
+    doc.add_paragraph(f"  Detalle técnico: {ext_link[3]}")
+    
+    doc.add_heading('1.3 Auditoría del orden de carga de scripts en código fuente', 2)
     for estado, _, detalle in cmp_audit['orden_items']:
         doc.add_paragraph(f"[{estado}] {detalle}")
         
-    doc.add_heading('1.2 Dictamen y Recomendación Técnica', 2)
+    doc.add_heading('1.4 Dictamen y Recomendación Técnica Principal', 2)
     doc.add_paragraph(cmp_audit['recomendacion'])
     
     # 2. Diagnóstico de Google Consent Mode
@@ -1139,7 +1346,7 @@ if btn_start:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
                 
-                progreso.progress(10, text="[1/5] Fase 1: Estado Default, detección de CMP y orden de scripts...")
+                progreso.progress(10, text="[1/5] Fase 1: Estado Default, detección de CMP, UI compliance y orden de scripts...")
                 c_def, p_def, a_def, cmp_info, raw_html = await auditar_fase(browser, target_url, action=None, inspect_cmp=True)
                 
                 progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas (Verificando bloqueo)...")
@@ -1205,7 +1412,7 @@ if st.session_state.audit_data and st.session_state.cmp_audit:
     )
     
     # ==========================================================================
-    # PESTAÑA 1: IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP
+    # PESTAÑA 1: IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP + UI COMPLIANCE AEPD
     # ==========================================================================
     if selected_tab == "🛠️ Implementación CMP":
         st.markdown("<h3 style='margin-bottom: 14px;'>Detección y Arquitectura Técnica del CMP</h3>", unsafe_allow_html=True)
@@ -1244,6 +1451,85 @@ if st.session_state.audit_data and st.session_state.cmp_audit:
             </div>
             """, unsafe_allow_html=True)
             
+        # ======================================================================
+        # MÓDULO 1: AUDITORÍA VISUAL Y DE INTERFAZ DEL BANNER (AEPD / EDPB)
+        # ======================================================================
+        st.markdown("<h4 style='color: #ffffff; margin-top: 18px; margin-bottom: 12px;'>Auditoría Visual y de Interfaz del Banner (Cumplimiento AEPD)</h4>", unsafe_allow_html=True)
+        ui = cmp_audit.get('ui_audit', {})
+        
+        col_ui1, col_ui2 = st.columns(2)
+        with col_ui1:
+            # 1. Cookie Wall
+            wall = ui.get('wall', ('N/D', '', '#94a3b8', ''))
+            st.markdown(f"""
+            <div class="ui-card">
+                <div class="ui-card-title">
+                    <span>🧱</span> Muro de Cookies (Cookie Wall)
+                </div>
+                <div class="diag-badge" style="background: rgba(251, 191, 36, 0.15); color: {wall[2]}; border: 1px solid {wall[2]};">
+                    {wall[1]}
+                </div>
+                <p style="color: #cbd5e1; font-size: 0.86rem; line-height: 1.55; margin: 0;">
+                    {wall[3]}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 2. Enlaces Externos / Derivaciones
+            ext = ui.get('external_link', ('N/D', '', '#94a3b8', ''))
+            st.markdown(f"""
+            <div class="ui-card">
+                <div class="ui-card-title">
+                    <span>🔗</span> Enlaces y Derivaciones Externas
+                </div>
+                <div class="diag-badge" style="background: rgba(16, 185, 129, 0.15); color: {ext[2]}; border: 1px solid {ext[2]};">
+                    {ext[1]}
+                </div>
+                <p style="color: #cbd5e1; font-size: 0.86rem; line-height: 1.55; margin: 0;">
+                    {ext[3]}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col_ui2:
+            # 3. Equidad de Botones
+            equity = ui.get('equity', ('N/D', '', '#94a3b8', ''))
+            st.markdown(f"""
+            <div class="ui-card">
+                <div class="ui-card-title">
+                    <span>⚖️</span> Equidad de Botones en 1ª Capa (AEPD)
+                </div>
+                <div class="diag-badge" style="background: rgba(52, 211, 153, 0.15); color: {equity[2]}; border: 1px solid {equity[2]};">
+                    {equity[1]}
+                </div>
+                <p style="color: #cbd5e1; font-size: 0.86rem; line-height: 1.55; margin: 0;">
+                    {equity[3]}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 4. Textos de 1ª Capa
+            st.markdown("""
+            <div class="ui-card">
+                <div class="ui-card-title">
+                    <span>📝</span> Transparencia Informativa en 1ª Capa
+                </div>
+            """, unsafe_allow_html=True)
+            for titulo, estado, ok_txt, ko_txt in ui.get('text_checks', []):
+                icon = "✅" if estado else "⚠️"
+                color = "#34d399" if estado else "#fbbf24"
+                text_to_show = ok_txt if estado else ko_txt
+                st.markdown(f"""
+                <div style="margin-bottom: 8px; font-size: 0.84rem; display: flex; align-items: flex-start; gap: 8px;">
+                    <span>{icon}</span>
+                    <div>
+                        <strong style="color: {color};">{titulo}:</strong>
+                        <span style="color: #cbd5e1;"> {text_to_show}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
         st.markdown("<h4 style='color: #ffffff; margin-top: 14px;'>Auditoría de Orden de Carga de Scripts</h4>", unsafe_allow_html=True)
         for estado, color, detalle in cmp_audit['orden_items']:
             st.markdown(f"""
@@ -1438,7 +1724,7 @@ if st.session_state.audit_data and st.session_state.cmp_audit:
     # ==========================================================================
     elif selected_tab == "📄 Generar Informe Word":
         st.markdown("<h3 style='margin-bottom: 14px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;'>Exporta el informe en formato Word (.docx) estructurado según el estándar oficial de auditoría de privacidad: incluye la arquitectura técnica del CMP, el orden de scripts en código fuente, la telemetría de Consent Mode y la matriz forense diferencial de cookies.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;'>Exporta el informe en formato Word (.docx) estructurado según el estándar oficial de auditoría de privacidad: incluye la arquitectura técnica del CMP, la auditoría visual y de interfaz (Módulo 1: Cookie Wall, equidad de botones y textos AEPD), el orden de scripts en código fuente, la telemetría de Consent Mode y la matriz forense diferencial de cookies.</p>", unsafe_allow_html=True)
         doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list, cmp_audit)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(

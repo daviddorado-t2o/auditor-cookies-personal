@@ -484,7 +484,6 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
     cmp_src = cmp_data.get('cmpScriptSrc', '')
     gtm_ids = cmp_data.get('gtmIds', [])
     cmp_loc = cmp_data.get('cmpLocation', 'No localizado')
-    has_consent_script = cmp_data.get('hasConsentDefaultScript', False)
     order = cmp_data.get('order', {})
     ui_data = cmp_data.get('ui', {})
     
@@ -492,7 +491,6 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
     pos_cmp = order.get('posCmp', -1)
     pos_gtm = order.get('posGtm', -1)
     
-    # Comprobar si está en el código fuente HTML original
     is_hardcoded = False
     if cmp_src and cmp_src in raw_html:
         is_hardcoded = True
@@ -580,9 +578,9 @@ def analizar_implementacion_cmp(cmp_data, raw_html):
     # 3. Transparencia de Textos de 1ª Capa
     checks = ui_data.get('checks', {})
     text_checks = [
-        ("Mención de cookies propias y de terceros", checks.get('checkThirdParty', False), "Se informa explícitamente del uso de tecnologías de terceros.", "No se identifica mención expresa a terceros en el texto inicial."),
-        ("Finalidades básicas detalladas (analítica y marketing)", checks.get('checkPurposes', False), "Se describen las finalidades básicas de métricas y publicidad personalizada.", "El texto no aclara con suficiencia las finalidades de marketing o rendimiento."),
-        ("Opciones de interacción (Aceptar, Rechazar o Configurar)", checks.get('checkUserAction', False), "Se explican con claridad las opciones del usuario ante el banner.", "No se detallan claramente las tres opciones de interacción del usuario."),
+        ("Mención de cookies propias y de terceros", checks.get('checkThirdParty', False), "Se informa explícitamente del uso de tecnologías propias y de terceros.", "No se identifica mención expresa a terceros en el texto inicial."),
+        ("Finalidades básicas detalladas (analítica y marketing)", checks.get('checkPurposes', False), "Se describen las finalidades básicas de métricas, mejora del servicio y publicidad personalizada.", "El texto no aclara con suficiencia las finalidades de marketing o rendimiento."),
+        ("Opciones de interacción (Aceptar, Rechazar o Configurar)", checks.get('checkUserAction', False), "Se explican con claridad las opciones de interacción del usuario ante el banner.", "No se detallan claramente las tres opciones de interacción del usuario."),
         ("Enlace accesible a Política de Cookies", checks.get('hasCookiePolicyLink', False), "Se incluye un enlace directo y accesible hacia la Política de Cookies.", "No se detecta un enlace visible hacia la Política de Cookies en la 1ª capa.")
     ]
 
@@ -819,6 +817,15 @@ async def interactuar_con_cmp(page, target_action):
             } catch(e) {}
         }
 
+        // Helper para comprobar visibilidad real
+        const isElementVisible = (el) => {
+            if (!el) return false;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+        };
+
         // 2. BOTONES DIRECTOS (CAPA 1)
         if (mode === 'accept') {
             const acceptSelectors = [
@@ -833,12 +840,12 @@ async def interactuar_con_cmp(page, target_action):
             ];
             for (let s of acceptSelectors) {
                 let el = document.querySelector(s);
-                if (el && el.offsetParent !== null) { el.click(); return "Selector: " + s; }
+                if (isElementVisible(el)) { el.click(); return "Selector: " + s; }
             }
             for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
                 let t = (b.innerText || b.value || '').trim().toLowerCase();
-                if (['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar', 'accept', 'allow all'].some(term => t === term || t.includes(term))) {
-                    b.click(); return "Texto: " + t;
+                if (['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar todas las cookies'].some(term => t === term || t.includes(term))) {
+                    if (isElementVisible(b)) { b.click(); return "Texto: " + t; }
                 }
             }
         }
@@ -856,12 +863,12 @@ async def interactuar_con_cmp(page, target_action):
             ];
             for (let s of rejectSelectors) {
                 let el = document.querySelector(s);
-                if (el && el.offsetParent !== null) { el.click(); return "Selector: " + s; }
+                if (isElementVisible(el)) { el.click(); return "Selector: " + s; }
             }
             for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
                 let t = (b.innerText || b.value || '').trim().toLowerCase();
-                if (['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar', 'reject', 'decline all', 'solo necesarias'].some(term => t === term || t.includes(term))) {
-                    b.click(); return "Texto: " + t;
+                if (['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar todas las cookies'].some(term => t === term || t.includes(term))) {
+                    if (isElementVisible(b)) { b.click(); return "Texto: " + t; }
                 }
             }
         }
@@ -878,13 +885,13 @@ async def interactuar_con_cmp(page, target_action):
         let panelOpened = false;
         for (let s of openManageSelectors) {
             let el = document.querySelector(s);
-            if (el && el.offsetParent !== null) { el.click(); panelOpened = true; break; }
+            if (isElementVisible(el)) { el.click(); panelOpened = true; break; }
         }
         if (!panelOpened) {
             for (let b of Array.from(document.querySelectorAll('button, a, span'))) {
                 let t = (b.innerText || '').trim().toLowerCase();
                 if (['personalizar', 'configurar', 'preferencias', 'customize', 'settings', 'manage cookies'].some(term => t.includes(term))) {
-                    b.click(); break;
+                    if (isElementVisible(b)) { b.click(); break; }
                 }
             }
         }
@@ -941,12 +948,12 @@ async def interactuar_con_cmp(page, target_action):
         ];
         for (let s of saveSelectors) {
             let el = document.querySelector(s);
-            if (el && el.offsetParent !== null) { el.click(); return "Guardado: " + s; }
+            if (isElementVisible(el)) { el.click(); return "Guardado: " + s; }
         }
         for (let b of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
             let t = (b.innerText || b.value || '').trim().toLowerCase();
             if (['guardar selección', 'guardar preferencias', 'guardar', 'save', 'confirmar opciones', 'allow selection'].some(term => t.includes(term))) {
-                b.click(); return "Guardado: " + t;
+                if (isElementVisible(b)) { b.click(); return "Guardado: " + t; }
             }
         }
         return "Configuración completada";
@@ -988,6 +995,14 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
             raw_html = await page.content()
             js_inspect = """
             () => {
+                const isVisible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0;
+                };
+
                 // 1. Detección de Scripts y CMP
                 const cmpSignatures = [
                     { name: "CookieScript", global: "CookieScript", pattern: /cdn\\.cookie-script\\.com/i },
@@ -1054,16 +1069,33 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
 
                 // 2. Módulo de Auditoría Visual e Interfaz (UI/UX Compliance AEPD)
                 const bannerSelectors = [
-                    '#cookiescript_injected', '#cookiescript_wrapper', '#onetrust-banner-sdk',
-                    '#CybotCookiebotDialog', '.cky-consent-container', '#didomi-notice',
-                    '#uc-central-modal', '#iubenda-cs-banner', 'div[id*="cookie"]', 'div[class*="cookie-banner"]'
+                    '#cookiescript_injected', '#cookiescript_wrapper', '#cookiescript_badge',
+                    '#onetrust-banner-sdk', '#CybotCookiebotDialog', '.cky-consent-container',
+                    '#didomi-notice', '#uc-central-modal', '#iubenda-cs-banner',
+                    '[role="dialog"][aria-label*="cookie" i]', 'div[id*="cookie" i]', 'div[class*="cookie" i]'
                 ];
                 let bannerEl = null;
                 for (let s of bannerSelectors) {
-                    let el = document.querySelector(s);
-                    if (el && el.offsetParent !== null) {
-                        bannerEl = el;
-                        break;
+                    let list = Array.from(document.querySelectorAll(s));
+                    for (let el of list) {
+                        if (isVisible(el)) {
+                            bannerEl = el;
+                            break;
+                        }
+                    }
+                    if (bannerEl) break;
+                }
+
+                if (!bannerEl) {
+                    const candidates = Array.from(document.querySelectorAll('div, section, aside'));
+                    for (let c of candidates) {
+                        if (isVisible(c)) {
+                            const t = (c.innerText || '').toLowerCase();
+                            if ((t.includes('cookies propias') || t.includes('utiliza cookies') || t.includes('usamos cookies')) && t.length < 2000) {
+                                bannerEl = c;
+                                break;
+                            }
+                        }
                     }
                 }
 
@@ -1078,7 +1110,7 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
                            parseInt(st.zIndex || '0') > 100 &&
                            el.offsetWidth >= window.innerWidth * 0.8 &&
                            el.offsetHeight >= window.innerHeight * 0.8 &&
-                           el.offsetParent !== null;
+                           isVisible(el);
                 });
                 const hasBackdrop = overlays.length > 0;
                 const isCookieWall = isScrollBlocked || (hasBackdrop && bannerEl && (bannerEl.contains(overlays[0]) || overlays[0].contains(bannerEl)));
@@ -1098,42 +1130,62 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
                 let btnAccept = null;
                 for (let s of acceptSelectors) {
                     let el = document.querySelector(s);
-                    if (el && el.offsetParent !== null) { btnAccept = el; break; }
+                    if (isVisible(el)) { btnAccept = el; break; }
                 }
                 if (!btnAccept) {
                     btnAccept = Array.from(document.querySelectorAll('button, a')).find(el => 
-                        ['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar'].some(t => (el.innerText || '').toLowerCase().trim() === t)
+                        ['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar todas las cookies'].some(t => (el.innerText || '').toLowerCase().trim().includes(t)) && isVisible(el)
                     );
                 }
 
                 let btnReject = null;
                 for (let s of rejectSelectors) {
                     let el = document.querySelector(s);
-                    if (el && el.offsetParent !== null) { btnReject = el; break; }
+                    if (isVisible(el)) { btnReject = el; break; }
                 }
                 if (!btnReject) {
                     btnReject = Array.from(document.querySelectorAll('button, a')).find(el => 
-                        ['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar'].some(t => (el.innerText || '').toLowerCase().trim() === t)
+                        ['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar todas las cookies'].some(t => (el.innerText || '').toLowerCase().trim().includes(t)) && isVisible(el)
                     );
                 }
 
-                const hasAcceptFirstLayer = btnAccept !== null && btnAccept.offsetParent !== null;
-                const hasRejectFirstLayer = btnReject !== null && btnReject.offsetParent !== null;
+                const hasAcceptFirstLayer = btnAccept !== null;
+                const hasRejectFirstLayer = btnReject !== null;
 
                 // 2.3 Textos y Enlaces del Banner
-                let bannerText = bannerEl ? bannerEl.innerText : (document.body.innerText.substring(0, 600));
+                let bannerText = "";
+                if (bannerEl) {
+                    bannerText = bannerEl.innerText || "";
+                } else {
+                    const cookieBlocks = Array.from(document.querySelectorAll('*')).filter(el => {
+                        return el.children.length === 0 && (el.innerText || '').toLowerCase().includes('cookies');
+                    });
+                    bannerText = cookieBlocks.map(el => el.parentElement ? el.parentElement.innerText : el.innerText).join(" ");
+                }
                 const txtLower = bannerText.toLowerCase();
 
                 const checkThirdParty = txtLower.includes('tercero') || txtLower.includes('third party') || txtLower.includes('terceros');
-                const checkPurposes = txtLower.includes('finalidad') || txtLower.includes('analítica') || txtLower.includes('analitica') || txtLower.includes('publicidad') || txtLower.includes('marketing') || txtLower.includes('rendimiento');
-                const checkUserAction = txtLower.includes('aceptar') && (txtLower.includes('rechazar') || txtLower.includes('configurar') || txtLower.includes('preferencias'));
+                const checkPurposes = txtLower.includes('analizar') || txtLower.includes('analítica') || txtLower.includes('analitica') || 
+                                      txtLower.includes('publicidad') || txtLower.includes('marketing') || txtLower.includes('personalizada') || 
+                                      txtLower.includes('mejorar') || txtLower.includes('servicios') || txtLower.includes('finalidad');
+                const checkUserAction = txtLower.includes('aceptar') && (txtLower.includes('rechazar') || txtLower.includes('configurar') || txtLower.includes('aquí') || txtLower.includes('aqui') || txtLower.includes('preferencias'));
 
-                const links = bannerEl ? Array.from(bannerEl.querySelectorAll('a')) : [];
+                let links = bannerEl ? Array.from(bannerEl.querySelectorAll('a')) : [];
+                if (links.length === 0) {
+                    links = Array.from(document.querySelectorAll('a')).filter(a => {
+                        const t = (a.innerText || '').toLowerCase();
+                        const h = (a.href || '').toLowerCase();
+                        return (t.includes('cookie') || h.includes('cookie') || t.includes('política') || t.includes('aquí')) && isVisible(a);
+                    });
+                }
                 const linkList = links.map(a => ({ text: a.innerText.trim(), href: a.href }));
                 
-                const cookiePolicyLink = linkList.find(l => 
-                    l.href.toLowerCase().includes('cookie') || l.text.toLowerCase().includes('cookie') || l.text.toLowerCase().includes('política') || l.text.toLowerCase().includes('politica')
-                );
+                const hasCookiePolicyLink = linkList.some(l => {
+                    const t = l.text.toLowerCase();
+                    const h = l.href.toLowerCase();
+                    return t.includes('cookie') || h.includes('cookie') || t.includes('política') || t.includes('politica') || t.includes('aquí') || t.includes('aqui');
+                }) || txtLower.includes('política de cookies') || txtLower.includes('politica de cookies');
+
                 const hasCookiepedia = linkList.some(l => l.href.toLowerCase().includes('cookiepedia.com'));
 
                 return {
@@ -1158,7 +1210,7 @@ async def auditar_fase(browser, url, action=None, inspect_cmp=False):
                             checkThirdParty,
                             checkPurposes,
                             checkUserAction,
-                            hasCookiePolicyLink: !!cookiePolicyLink,
+                            hasCookiePolicyLink: !!hasCookiePolicyLink,
                             hasCookiepedia
                         },
                         links: linkList

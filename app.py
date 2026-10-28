@@ -14,46 +14,31 @@ def ensure_playwright():
 
 ensure_playwright()
 
-st.title("🛡️ Privacy & Consent Mode v2 Auditor")
-st.caption("Auditoría técnica automatizada: Matriz completa de consentimientos (5 fases)")
+def is_google_consent_ping(url):
+    u = url.lower()
+    if "gcs=" in u or "gcd=" in u:
+        return True
+    if ("google-analytics.com" in u or "analytics.google.com" in u) and "collect" in u:
+        return True
+    if ("googleads" in u or "doubleclick.net" in u or "google.com/pagead" in u):
+        return True
+    return False
 
-# Persistencia de memoria para evitar reseteos al interactuar con filtros
-if "audit_data" not in st.session_state:
-    st.session_state.audit_data = None
-if "domain" not in st.session_state:
-    st.session_state.domain = ""
-
-target_url = st.text_input("Introduce la URL a auditar:", placeholder="https://es.bolognarthotels.it/")
-
-CMP_CONFIG = {
-    "CookieScript": {
-        "accept": "#cookiescript_accept",
-        "reject": "#cookiescript_reject",
-        "manage": "#cookiescript_manage",
-        "cat_perf": "#cookiescript_category_performance",
-        "cat_target": "#cookiescript_category_targeting",
-        "save": "#cookiescript_save"
-    },
-    "OneTrust": {
-        "accept": "#onetrust-accept-btn-handler",
-        "reject": "#onetrust-reject-all-handler",
-        "manage": "#onetrust-pc-btn-handler",
-        "cat_perf": "input[id*='ot-group-id-C0002']",
-        "cat_target": "input[id*='ot-group-id-C0004']",
-        "save": ".save-preference-btn-handler"
-    },
-    "Cookiebot": {
-        "accept": "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
-        "reject": "#CybotCookiebotDialogBodyButtonDecline",
-        "manage": "#CybotCookiebotDialogBodyLevelButtonCustomize",
-        "cat_perf": "#CybotCookiebotDialogBodyLevelButtonStatistics",
-        "cat_target": "#CybotCookiebotDialogBodyLevelButtonMarketing",
-        "save": "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection"
-    }
-}
-
-def extract_consent_params(url):
-    parsed = parse_qs(urlparse(url).query)
+def extract_consent_params(pings):
+    if not pings:
+        return {
+            'gcs': 'No detectado',
+            'gcd': 'No detectado',
+            'npa': 'No detectado',
+            'dma': 'No detectado',
+            'pscdl': 'No detectado'
+        }
+    
+    # Priorizar el ping más reciente que contenga gcs o gcd
+    valid_pings = [p for p in pings if ("gcs=" in p.lower() or "gcd=" in p.lower())]
+    target_url = valid_pings[-1] if valid_pings else pings[-1]
+    
+    parsed = parse_qs(urlparse(target_url).query)
     return {
         'gcs': parsed.get('gcs', ['No detectado'])[0],
         'gcd': parsed.get('gcd', ['No detectado'])[0],
@@ -62,86 +47,163 @@ def extract_consent_params(url):
         'pscdl': parsed.get('pscdl', ['No detectado'])[0]
     }
 
-async def interactuar_cmp(page, action):
-    # 1. Acciones globales directas
-    if action in ["accept", "reject"]:
-        for cmp_name, cfg in CMP_CONFIG.items():
-            sel = cfg.get(action)
-            try:
-                elem = page.locator(sel).first
-                if await elem.is_visible(timeout=800):
-                    await elem.click()
-                    return f"{cmp_name} ({action})"
-            except Exception:
-                pass
-
-        patterns = {
-            "accept": ["Aceptar todas", "Aceptar todo", "Accept all", "Permitir todas", "Aceptar", "Accept"],
-            "reject": ["Rechazar todas", "Rechazar todo", "Reject all", "Denegar", "Rechazar", "Reject"]
-        }
-        for txt in patterns.get(action, []):
-            try:
-                btn = page.locator(f"button:has-text('{txt}'), a:has-text('{txt}')").first
-                if await btn.is_visible(timeout=800):
-                    await btn.click()
-                    return f"Heurística ('{txt}')"
-            except Exception:
-                pass
-
-    # 2. Configuración granular en segunda capa
-    elif action in ["only_analytics", "only_marketing"]:
-        for cmp_name, cfg in CMP_CONFIG.items():
-            manage_sel = cfg.get("manage")
-            try:
-                btn_manage = page.locator(manage_sel).first
-                if await btn_manage.is_visible(timeout=1000):
-                    await btn_manage.click()
-                    await asyncio.sleep(1.5)
-                    
-                    perf_sel = cfg.get("cat_perf")
-                    target_sel = cfg.get("cat_target")
-                    save_sel = cfg.get("save")
-                    
-                    if action == "only_analytics":
-                        if perf_sel and await page.locator(perf_sel).is_visible():
-                            await page.locator(perf_sel).check()
-                        if target_sel and await page.locator(target_sel).is_visible():
-                            await page.locator(target_sel).uncheck()
-                    elif action == "only_marketing":
-                        if perf_sel and await page.locator(perf_sel).is_visible():
-                            await page.locator(perf_sel).uncheck()
-                        if target_sel and await page.locator(target_sel).is_visible():
-                            await page.locator(target_sel).check()
-                    
-                    if save_sel:
-                        btn_save = page.locator(save_sel).first
-                        if await btn_save.is_visible(timeout=1200):
-                            await btn_save.click()
-                            return f"{cmp_name} ({action})"
-            except Exception:
-                pass
-
-    return "No interactuado"
-
-async def ejecutar_fase(browser, url, action=None):
+async def ejecutar_fase_semantica(browser, url, action=None):
     context = await browser.new_context()
     page = await context.new_page()
     pings = []
     
-    page.on("request", lambda r: pings.append(r.url) if ("collect" in r.url and "google" in r.url) else None)
+    page.on("request", lambda r: pings.append(r.url) if is_google_consent_ping(r.url) else None)
     
     try:
-        await page.goto(url, timeout=20000, wait_until="domcontentloaded")
+        await page.goto(url, timeout=25000, wait_until="domcontentloaded")
     except Exception:
         pass
     
-    await asyncio.sleep(2)
+    await asyncio.sleep(2.5)
     
-    action_info = "Sin interacción (Default)"
-    if action:
-        action_info = await interactuar_cmp(page, action)
-        await asyncio.sleep(2.5)
+    action_info = "Default (Sin interacción)"
+    
+    if action in ["accept", "reject"]:
+        js_simple = """
+        (mode) => {
+            const acceptPatterns = ['aceptar todas', 'aceptar todo', 'accept all', 'permitir todas', 'aceptar', 'accept'];
+            const rejectPatterns = ['rechazar todas', 'rechazar todo', 'reject all', 'denegar', 'rechazar', 'reject'];
+            const patterns = (mode === 'accept') ? acceptPatterns : rejectPatterns;
+            
+            // 1. IDs comunes
+            const ids = (mode === 'accept') 
+                ? ['#cookiescript_accept', '#onetrust-accept-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll', '#didomi-notice-agree-button']
+                : ['#cookiescript_reject', '#onetrust-reject-all-handler', '#CybotCookiebotDialogBodyButtonDecline', '#didomi-notice-disagree-button'];
+            
+            for (let id of ids) {
+                let el = document.querySelector(id);
+                if (el && el.offsetParent !== null) {
+                    el.click();
+                    return "Selector directo: " + id;
+                }
+            }
+            
+            // 2. Búsqueda por texto en botones/enlaces
+            const clickable = Array.from(document.querySelectorAll('button, a, div[role="button"], input[type="button"]'));
+            for (let el of clickable) {
+                let txt = (el.innerText || el.value || '').trim().toLowerCase();
+                if (patterns.some(p => txt === p || txt.includes(p))) {
+                    el.click();
+                    return "Heurística: " + txt;
+                }
+            }
+            return "No encontrado";
+        }
+        """
+        action_info = await page.evaluate(js_simple, action)
+        await asyncio.sleep(3.5)
         
+    elif action in ["only_analytics", "only_marketing"]:
+        js_granular = """
+        (targetMode) => {
+            // 1. Abrir panel de preferencias/ajustes si no está visible
+            const openPatterns = ['personalizar', 'configurar', 'gestionar', 'preferencias', 'ajustes', 'opciones', 'customize', 'manage', 'settings', 'preferences'];
+            const openIds = ['#cookiescript_manage', '#onetrust-pc-btn-handler', '#CybotCookiebotDialogBodyLevelButtonCustomize', '#didomi-notice-learn-more-button'];
+            
+            for (let id of openIds) {
+                let el = document.querySelector(id);
+                if (el && el.offsetParent !== null) {
+                    el.click();
+                    break;
+                }
+            }
+            
+            const clickables = Array.from(document.querySelectorAll('button, a, span, div[role="button"]'));
+            for (let el of clickables) {
+                let txt = (el.innerText || '').trim().toLowerCase();
+                if (openPatterns.some(p => txt.includes(p)) && el.offsetParent !== null) {
+                    el.click();
+                    break;
+                }
+            }
+            
+            // Pequeña pausa síncrona visual en el DOM para despliegue de categorías
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const anaKeywords = ['analítica', 'analitica', 'analytics', 'rendimiento', 'performance', 'estadística', 'estadistica', 'medición', 'medicion', 'tráfico', 'trafico'];
+                    const mktKeywords = ['marketing', 'publicidad', 'publicitaria', 'publicitarias', 'anuncios', 'ads', 'targeting', 'segmentación', 'segmentacion', 'comercial'];
+                    const necKeywords = ['necesaria', 'necesarias', 'técnica', 'tecnica', 'strict', 'strictly', 'esencial'];
+
+                    // Buscar todos los bloques o checkboxes dentro del banner
+                    const allInputs = Array.from(document.querySelectorAll('input[type="checkbox"], [role="checkbox"], [role="switch"]'));
+                    
+                    allInputs.forEach(input => {
+                        // Buscar el contenedor contextual más cercano (hasta 5 niveles arriba)
+                        let container = input.closest('.cookiescript_checkbox, .ot-cat-item, tr, li, div') || input.parentElement;
+                        let contextText = (container ? container.innerText : '').toLowerCase();
+
+                        // Clasificación semántica por descripción y título
+                        let isNecessary = necKeywords.some(k => contextText.includes(k));
+                        let isAnalytics = !isNecessary && anaKeywords.some(k => contextText.includes(k));
+                        let isMarketing = !isNecessary && mktKeywords.some(k => contextText.includes(k));
+
+                        let desiredState = false;
+                        if (targetMode === 'only_analytics' && isAnalytics) desiredState = true;
+                        if (targetMode === 'only_marketing' && isMarketing) desiredState = true;
+
+                        // Aplicar estado si no es necesaria
+                        if (!isNecessary && (isAnalytics || isMarketing)) {
+                            if (input.tagName === 'INPUT') {
+                                if (input.checked !== desiredState) {
+                                    input.checked = desiredState;
+                                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                                    // Si tiene un label o switch visual asociado, hacer click
+                                    if (input.id) {
+                                        let lbl = document.querySelector(`label[for="${input.id}"]`);
+                                        if (lbl) lbl.click();
+                                    }
+                                }
+                            } else {
+                                // Elementos ARIA role=checkbox/switch
+                                let isAriaChecked = input.getAttribute('aria-checked') === 'true';
+                                if (isAriaChecked !== desiredState) {
+                                    input.click();
+                                }
+                            }
+                        }
+                    });
+
+                    // 3. Guardar selección
+                    setTimeout(() => {
+                        const savePatterns = ['guardar selección', 'guardar seleccion', 'guardar preferencias', 'guardar', 'confirmar mis opciones', 'confirmar opciones', 'save', 'allow selection', 'confirm choices'];
+                        const saveIds = ['#cookiescript_save', '.save-preference-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection'];
+                        
+                        for (let sId of saveIds) {
+                            let sEl = document.querySelector(sId);
+                            if (sEl && sEl.offsetParent !== null) {
+                                sEl.click();
+                                resolve("Guardado por ID: " + sId);
+                                return;
+                            }
+                        }
+                        
+                        for (let el of Array.from(document.querySelectorAll('button, a, input[type="button"]'))) {
+                            let txt = (el.innerText || el.value || '').trim().toLowerCase();
+                            if (savePatterns.some(p => txt === p || txt.includes(p)) && el.offsetParent !== null) {
+                                el.click();
+                                resolve("Guardado por texto: " + txt);
+                                return;
+                            }
+                        }
+                        resolve("Selección aplicada (intento guardado genérico)");
+                    }, 800);
+                }, 1200);
+            });
+        }
+        """
+        try:
+            action_info = await page.evaluate(js_granular, action)
+        except Exception as e:
+            action_info = f"Error interacción: {e}"
+            
+        await asyncio.sleep(4.0)
+
     cookies = await context.cookies()
     await context.close()
     return cookies, pings, action_info
@@ -151,7 +213,7 @@ def generar_documento_auditoria(domain, audit_data):
     doc.add_heading('AUDITORÍA PRIVACY', 0)
     doc.add_paragraph('Octubre 2026')
     doc.add_heading('Introducción.', 1)
-    doc.add_paragraph('Este documento pretende revisar todas las cuestiones fundamentales referidas al cumplimiento de las premisas legales establecidas por el RGPD y las directrices de la AEPD...')
+    doc.add_paragraph('Este documento pretende revisar todas las cuestiones fundamentales referidas al cumplimiento de las premisas legales establecidas por el RGPD y las directrices de la Agencia Española de Protección de Datos (AEPD).')
     
     doc.add_paragraph(f'\n{domain}')
     doc.add_heading('1.- HOME', 1)
@@ -178,16 +240,17 @@ def generar_documento_auditoria(domain, audit_data):
     
     def add_cm_section(subtit, key, expected):
         doc.add_heading(subtit, 3)
-        pings = audit_data[key]['pings']
-        if pings:
-            p = extract_consent_params(pings[-1] if key != 'default' else pings[0])
+        p = extract_consent_params(audit_data[key]['pings'])
+        if p['gcs'] != 'No detectado' or p['gcd'] != 'No detectado':
             doc.add_paragraph(f"- Señal GCS: {p['gcs']}")
             doc.add_paragraph(f"- Cadena GCD: {p['gcd']}")
             doc.add_paragraph(f"- Señales DMA y NPA: npa={p['npa']}, dma={p['dma']}")
             if expected in p['gcs']:
                 doc.add_paragraph(f"Diagnóstico: Señal esperada ({expected}) transmitida correctamente.")
+            else:
+                doc.add_paragraph(f"Diagnóstico: Señal observada ({p['gcs']}). Verificar correspondencia con {expected}.")
         else:
-            doc.add_paragraph("Sin llamadas collect detectadas.")
+            doc.add_paragraph("Sin llamadas collect o pings de Consent Mode detectados.")
 
     add_cm_section('1.3.1 Revisión previa al consentimiento (valores default)', 'default', 'G100')
     add_cm_section('1.3.2 Revisión tras rechazar todas (update)', 'reject', 'G100')
@@ -203,15 +266,31 @@ def generar_documento_auditoria(domain, audit_data):
     doc_io.seek(0)
     return doc_io
 
-# Lanzador con barra de progreso
-if st.button("🚀 Iniciar Auditoría Completa de Consentimiento", type="primary", use_container_width=True):
-    if not target_url.startswith("http"):
-        st.error("Introduce una URL completa con https:// o http://")
+# Interfaz Principal
+st.title("🛡️ Privacy & Consent Mode v2 Auditor")
+st.caption("Auditoría técnica automatizada: Matriz semántica de cookies y señales Google Consent Mode v2")
+
+if "audit_data" not in st.session_state:
+    st.session_state.audit_data = None
+if "domain" not in st.session_state:
+    st.session_state.domain = ""
+
+col_in, col_btn = st.columns([4, 1])
+with col_in:
+    target_url = st.text_input("Introduce la URL a auditar:", placeholder="https://es.art-hotel-commercianti.com/")
+with col_btn:
+    st.write("")
+    st.write("")
+    btn_auditar = st.button("🚀 Iniciar Auditoría", type="primary", use_container_width=True)
+
+if btn_auditar:
+    if not target_url.strip().startswith("http"):
+        st.error("Introduce una URL completa que comience por https:// o http://")
     else:
         st.session_state.domain = urlparse(target_url).netloc
-        progreso = st.progress(0, text="Iniciando Chromium en la nube...")
+        progreso = st.progress(0, text="Iniciando navegador...")
         
-        async def auditar_paso_a_paso():
+        async def ejecutar_matriz():
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
                     headless=True,
@@ -219,19 +298,19 @@ if st.button("🚀 Iniciar Auditoría Completa de Consentimiento", type="primary
                 )
                 
                 progreso.progress(10, text="[1/5] Fase 1: Aterrizaje Default...")
-                c_def, p_def, a_def = await ejecutar_fase(browser, target_url, action=None)
+                c_def, p_def, a_def = await ejecutar_fase_semantica(browser, target_url, action=None)
                 
                 progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas...")
-                c_rej, p_rej, a_rej = await ejecutar_fase(browser, target_url, action="reject")
+                c_rej, p_rej, a_rej = await ejecutar_fase_semantica(browser, target_url, action="reject")
                 
                 progreso.progress(50, text="[3/5] Fase 3: Aceptar Todas...")
-                c_acc, p_acc, a_acc = await ejecutar_fase(browser, target_url, action="accept")
+                c_acc, p_acc, a_acc = await ejecutar_fase_semantica(browser, target_url, action="accept")
                 
-                progreso.progress(70, text="[4/5] Fase 4: Solo Analítica...")
-                c_ana, p_ana, a_ana = await ejecutar_fase(browser, target_url, action="only_analytics")
+                progreso.progress(70, text="[4/5] Fase 4: Solo Analítica (Rendimiento/Estadísticas)...")
+                c_ana, p_ana, a_ana = await ejecutar_fase_semantica(browser, target_url, action="only_analytics")
                 
-                progreso.progress(90, text="[5/5] Fase 5: Solo Marketing...")
-                c_mkt, p_mkt, a_mkt = await ejecutar_fase(browser, target_url, action="only_marketing")
+                progreso.progress(90, text="[5/5] Fase 5: Solo Marketing (Publicidad/Targeting)...")
+                c_mkt, p_mkt, a_mkt = await ejecutar_fase_semantica(browser, target_url, action="only_marketing")
                 
                 await browser.close()
                 progreso.progress(100, text="¡Completado con éxito!")
@@ -245,12 +324,11 @@ if st.button("🚀 Iniciar Auditoría Completa de Consentimiento", type="primary
                 }
 
         try:
-            st.session_state.audit_data = asyncio.run(auditar_paso_a_paso())
+            st.session_state.audit_data = asyncio.run(ejecutar_matriz())
             progreso.empty()
         except Exception as e:
             st.error(f"Error durante el escaneo: {e}")
 
-# Renderizado condicional mediante session_state (persiste entre clics y filtros)
 if st.session_state.audit_data:
     data = st.session_state.audit_data
     domain = st.session_state.domain
@@ -272,17 +350,13 @@ if st.session_state.audit_data:
         for col, (label, key, expected_gcs) in zip(cols, fases):
             with col:
                 st.markdown(f"**{label}**")
-                pings = data[key]['pings']
-                if pings:
-                    p = extract_consent_params(pings[-1] if key != 'default' else pings[0])
-                    st.metric("GCS", p['gcs'])
-                    if expected_gcs in p['gcs']:
-                        st.caption(f"✅ Esperado: {expected_gcs}")
-                    else:
-                        st.caption(f"⚠️ Esperado: {expected_gcs}")
-                    st.code(f"GCD: {p['gcd']}\nNPA: {p['npa']}\nDMA: {p['dma']}", language="text")
+                p = extract_consent_params(data[key]['pings'])
+                st.metric("GCS", p['gcs'])
+                if expected_gcs in p['gcs']:
+                    st.caption(f"✅ Esperado: {expected_gcs}")
                 else:
-                    st.warning("Sin pings")
+                    st.caption(f"⚠️ Esperado: {expected_gcs}")
+                st.code(f"GCD: {p['gcd']}\nNPA: {p['npa']}\nDMA: {p['dma']}", language="text")
                 st.caption(f"Acción: {data[key]['action']}")
     
     with t_ck:

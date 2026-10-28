@@ -7,14 +7,271 @@ from urllib.parse import urlparse, parse_qs
 import io
 import os
 import re
+import time
 
-st.set_page_config(page_title="Auditor Privacy & Consent Mode v2", page_icon="🛡️", layout="wide")
+st.set_page_config(
+    page_title="Privacy & Consent Mode v2 Auditor",
+    page_icon="🛡️",
+    layout="wide"
+)
+
+# Estilos visuales Cybersecurity Dark Mode
+st.markdown("""
+<style>
+.stApp {
+    background-color: #0a0d14;
+    color: #e2e8f0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+h1, h2, h3, h4 {
+    color: #f8fafc !important;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+.cyber-panel {
+    background: #111726;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    transition: all 0.25s ease;
+}
+.cyber-panel:hover {
+    border-color: #00f0ff;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    transform: translateY(-2px);
+}
+.cyber-panel-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #94a3b8;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.cyber-panel-val {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #00f0ff;
+    font-family: 'Courier New', Courier, monospace;
+}
+.cyber-badge-ok {
+    display: inline-block;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 6px;
+}
+.cyber-badge-warn {
+    display: inline-block;
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 6px;
+}
+.cyber-console {
+    background: #070a10;
+    border: 1px solid #1b2438;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    margin-top: 8px;
+    word-break: break-all;
+}
+.cyber-action {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin-top: 6px;
+}
+.stTextInput > div > div > input {
+    background-color: #111726 !important;
+    color: #f8fafc !important;
+    border: 1px solid #23304a !important;
+    border-radius: 8px !important;
+    font-size: 0.95rem;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #00f0ff !important;
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.25) !important;
+}
+.stButton > button {
+    background: linear-gradient(135deg, #00f0ff 0%, #0284c7 100%) !important;
+    color: #070a10 !important;
+    font-weight: 800 !important;
+    border: none !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 15px rgba(0, 240, 255, 0.25) !important;
+    transition: all 0.2s ease !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.stButton > button:hover {
+    box-shadow: 0 6px 25px rgba(0, 240, 255, 0.5) !important;
+    transform: translateY(-1px);
+    color: #000000 !important;
+}
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: transparent;
+    border-bottom: 1px solid #1e293b;
+    margin-bottom: 16px;
+}
+.stTabs [data-baseweb="tab"] {
+    background-color: #111726;
+    border: 1px solid #1e293b;
+    border-radius: 8px 8px 0 0;
+    color: #94a3b8;
+    padding: 10px 22px;
+    font-weight: 600;
+}
+.stTabs [aria-selected="true"] {
+    background-color: #162035 !important;
+    border-color: #00f0ff !important;
+    color: #00f0ff !important;
+}
+div[data-testid="stDataFrame"] {
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    overflow: hidden;
+}
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def ensure_playwright():
     os.system("playwright install chromium")
 
 ensure_playwright()
+
+# Base de firmas de cookies conocidas para auditoría técnica
+KNOWN_COOKIES = {
+    "_ga": ("Google Analytics", "Analítica / Rendimiento"),
+    "_gid": ("Google Analytics", "Analítica / Rendimiento"),
+    "_gat": ("Google Analytics", "Analítica / Rendimiento"),
+    "pk_id": ("Matomo / Piwik", "Analítica / Rendimiento"),
+    "pk_ses": ("Matomo / Piwik", "Analítica / Rendimiento"),
+    "_clck": ("Microsoft Clarity", "Analítica / Rendimiento"),
+    "_clsk": ("Microsoft Clarity", "Analítica / Rendimiento"),
+    "_hj": ("Hotjar", "Analítica / Rendimiento"),
+    "_fbp": ("Meta Pixel (Facebook)", "Marketing / Publicidad"),
+    "_fbc": ("Meta Pixel (Facebook)", "Marketing / Publicidad"),
+    "fr": ("Meta / Facebook", "Marketing / Publicidad"),
+    "ide": ("Google DoubleClick", "Marketing / Publicidad"),
+    "test_cookie": ("Google DoubleClick", "Marketing / Publicidad"),
+    "__gads": ("Google Ad Manager", "Marketing / Publicidad"),
+    "__gpi": ("Google Ad Manager", "Marketing / Publicidad"),
+    "_gcl_au": ("Google AdSense / Conversion", "Marketing / Publicidad"),
+    "_gcl_aw": ("Google Ads", "Marketing / Publicidad"),
+    "_gcl_dc": ("Google Ads DoubleClick", "Marketing / Publicidad"),
+    "nid": ("Google LLC", "Marketing / Publicidad"),
+    "muid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
+    "_uetsid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
+    "_uetvid": ("Microsoft Bing Ads", "Marketing / Publicidad"),
+    "tt_webid": ("TikTok Pixel", "Marketing / Publicidad"),
+    "cto_bundle": ("Criteo", "Marketing / Publicidad"),
+    "cookiescriptconsent": ("CookieScript (CMP)", "Técnica / Necesaria"),
+    "optanonconsent": ("OneTrust (CMP)", "Técnica / Necesaria"),
+    "cookieconsent": ("CMP / Consent", "Técnica / Necesaria"),
+    "didomi_token": ("Didomi (CMP)", "Técnica / Necesaria"),
+    "phpsessid": ("Servidor Web (PHP)", "Técnica / Necesaria"),
+    "jsessionid": ("Servidor Web (Java)", "Técnica / Necesaria"),
+    "aspsessionid": ("Servidor Web (ASP.NET)", "Técnica / Necesaria"),
+    "csrftoken": ("Seguridad CSRF", "Técnica / Necesaria")
+}
+
+def calcular_duracion(expires_unix):
+    if not expires_unix or expires_unix == -1 or expires_unix <= 0:
+        return "Sesión"
+    diff = expires_unix - time.time()
+    if diff <= 0:
+        return "Expirada / Sesión"
+    dias = diff / 86400
+    if dias < 1:
+        horas = int(diff / 3600)
+        return f"{max(1, horas)} horas" if horas > 0 else "Menos de 1 h"
+    elif dias < 30:
+        return f"{int(dias)} días"
+    elif dias < 365:
+        return f"{int(dias / 30)} meses"
+    else:
+        anos = round(dias / 365, 1)
+        return "1 año" if anos == 1.0 else f"{anos:g} años"
+
+def enriquecer_cookie(cookie, phase_key):
+    name = cookie.get('name', '')
+    domain = cookie.get('domain', '')
+    expires = cookie.get('expires', -1)
+    duracion = calcular_duracion(expires)
+    
+    name_clean = name.lower().replace('-', '_')
+    prov = f"Propio ({domain})"
+    cat_recomendada = "Técnica / Necesaria"
+    
+    matched = False
+    for pattern, (p_name, p_cat) in KNOWN_COOKIES.items():
+        if pattern in name_clean:
+            prov = p_name
+            cat_recomendada = p_cat
+            matched = True
+            break
+            
+    if not matched:
+        if any(k in name_clean for k in ['sess', 'csrf', 'token', 'auth', 'lang', 'cart']):
+            prov = f"Propio ({domain})"
+            cat_recomendada = "Técnica / Necesaria"
+        elif any(k in name_clean for k in ['ad', 'track', 'pixel', 'banner']):
+            prov = "Tercero publicitario"
+            cat_recomendada = "Marketing / Publicidad"
+        else:
+            cat_recomendada = "Por categorizar"
+
+    # Categorización asignada por la web según el momento en que se inyecta
+    if phase_key in ['default', 'reject']:
+        cat_web = "Técnica / Exenta (Disparada sin consentimiento)"
+    elif phase_key == 'analytics':
+        cat_web = "Analítica / Rendimiento"
+    elif phase_key == 'marketing':
+        cat_web = "Marketing / Publicidad"
+    else:
+        cat_web = "Consentimiento Global"
+
+    # Diagnóstico legal de conformidad
+    if phase_key in ['default', 'reject']:
+        if "Analítica" in cat_recomendada or "Marketing" in cat_recomendada:
+            diagnostico = "❌ Infracción (Fuga sin consentimiento)"
+        elif cat_recomendada == "Por categorizar":
+            diagnostico = "⚠️ Por revisar"
+        else:
+            diagnostico = "✅ Correcto (Técnica)"
+    elif phase_key == 'analytics':
+        if "Marketing" in cat_recomendada:
+            diagnostico = "❌ Infracción (Publicidad en Analítica)"
+        else:
+            diagnostico = "✅ Correcto"
+    else:
+        diagnostico = "✅ Autorizada"
+
+    return {
+        "Nombre": name,
+        "Proveedor": prov,
+        "Duración": duracion,
+        "Categoría en Web": cat_web,
+        "Categoría Debería Ser": cat_recomendada,
+        "Diagnóstico": diagnostico,
+        "Dominio": domain,
+        "Segura": "Sí" if cookie.get('secure') else "No"
+    }
 
 def is_google_consent_ping(url_str):
     u = url_str.lower()
@@ -35,8 +292,6 @@ def decode_gcd_letter(letter):
 def decode_gcd(gcd_str):
     if not gcd_str or gcd_str == 'No detectado':
         return None
-    
-    # Formato GCD estándar: 1<sep><ad_storage><sep><analytics_storage><sep><ad_user_data><sep><ad_personalization>
     m = re.match(r'^1([0-9])([a-zA-Z])([0-9])([a-zA-Z])([0-9])([a-zA-Z])([0-9])([a-zA-Z])', gcd_str)
     if not m:
         return None
@@ -71,7 +326,6 @@ def extract_consent_params(pings):
     npa = 'No detectado'
     dma = 'No detectado'
     
-    # Rastrear todos los pings de la fase (del más reciente al más antiguo)
     for p in reversed(pings):
         parsed = parse_qs(urlparse(p).query)
         if not parsed:
@@ -88,7 +342,6 @@ def extract_consent_params(pings):
             
     gcd_decoded = decode_gcd(gcd)
     
-    # Deducción matemática de GCS si el ping de red no lo envió explícitamente
     if gcs == 'No detectado' and gcd_decoded:
         ad_ok = gcd_decoded['ad_storage']['is_granted']
         ana_ok = gcd_decoded['analytics_storage']['is_granted']
@@ -105,7 +358,6 @@ def extract_consent_params(pings):
 async def interactuar_con_cmp(page, target_action):
     js_action = """
     async (mode) => {
-        // 1. Integración directa con API oficial de CookieScript
         if (window.CookieScript && window.CookieScript.instance) {
             try {
                 if (mode === 'accept') {
@@ -126,7 +378,6 @@ async def interactuar_con_cmp(page, target_action):
             }
         }
 
-        // 2. Interacción estándar vía botones de 1ª capa (Aceptar / Rechazar)
         if (mode === 'accept') {
             const acceptSelectors = ['#cookiescript_accept', '#onetrust-accept-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll', '#didomi-notice-agree-button'];
             for (let s of acceptSelectors) {
@@ -157,7 +408,6 @@ async def interactuar_con_cmp(page, target_action):
             }
         }
 
-        // 3. Configuración granular en 2ª capa
         const openManageSelectors = ['#cookiescript_manage', '#onetrust-pc-btn-handler', '#CybotCookiebotDialogBodyLevelButtonCustomize', '#didomi-notice-learn-more-button'];
         for (let s of openManageSelectors) {
             let el = document.querySelector(s);
@@ -165,7 +415,6 @@ async def interactuar_con_cmp(page, target_action):
         }
         await new Promise(r => setTimeout(r, 900));
 
-        // Manipulación de casillas por IDs directos
         let perfInput = document.querySelector('#cookiescript_category_performance, input[id*="ot-group-id-C0002"]');
         let targetInput = document.querySelector('#cookiescript_category_targeting, input[id*="ot-group-id-C0004"]');
         
@@ -181,7 +430,6 @@ async def interactuar_con_cmp(page, target_action):
 
         await new Promise(r => setTimeout(r, 600));
 
-        // Guardar configuración
         const saveSelectors = ['#cookiescript_save', '.save-preference-btn-handler', '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection'];
         for (let s of saveSelectors) {
             let el = document.querySelector(s);
@@ -243,7 +491,6 @@ def generar_documento_word(domain, audit_data):
     doc.add_paragraph('Este informe audita el comportamiento técnico de cookies y el envío de señales bajo Google Consent Mode v2 según las directrices de la AEPD y el RGPD.')
     doc.add_paragraph(f'\nDominio evaluado: {domain}')
     
-    # 1. Matriz Resumen de Consent Mode v2
     doc.add_heading('1.- Matriz de Parámetros Google Consent Mode v2', 1)
     table = doc.add_table(rows=1, cols=6)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -274,7 +521,7 @@ def generar_documento_word(domain, audit_data):
             params = extract_consent_params(audit_data[f]['pings'])
             row[idx].text = str(extractor(params))
             
-    doc.add_heading('2.- Inventario de Cookies por Sección', 1)
+    doc.add_heading('2.- Inventario y Clasificación Forense de Cookies', 1)
     secciones = [
         ("2.1 Cookies en Aterrizaje Inicial (Default)", 'default'),
         ("2.2 Cookies tras Rechazar Todas", 'reject'),
@@ -286,9 +533,25 @@ def generar_documento_word(domain, audit_data):
         doc.add_heading(tit, 2)
         cookies = audit_data[k]['cookies']
         if cookies:
-            doc.add_paragraph(f"Total registradas: {len(cookies)}")
+            c_table = doc.add_table(rows=1, cols=6)
+            c_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            chdr = c_table.rows[0].cells
+            chdr[0].text = "Nombre"
+            chdr[1].text = "Proveedor"
+            chdr[2].text = "Duración"
+            chdr[3].text = "Cat. en Web"
+            chdr[4].text = "Debería Ser"
+            chdr[5].text = "Diagnóstico"
+            
             for c in cookies:
-                doc.add_paragraph(f"- {c['name']} (Dominio: {c['domain']})", style='List Bullet')
+                c_info = enriquecer_cookie(c, k)
+                r_cells = c_table.add_row().cells
+                r_cells[0].text = c_info['Nombre']
+                r_cells[1].text = c_info['Proveedor']
+                r_cells[2].text = c_info['Duración']
+                r_cells[3].text = c_info['Categoría en Web']
+                r_cells[4].text = c_info['Categoría Debería Ser']
+                r_cells[5].text = c_info['Diagnóstico']
         else:
             doc.add_paragraph("No se detectaron cookies registradas.")
 
@@ -297,9 +560,9 @@ def generar_documento_word(domain, audit_data):
     doc_io.seek(0)
     return doc_io
 
-# INTERFAZ STREAMLIT
-st.title("🛡️ Privacy & Consent Mode v2 Auditor")
-st.caption("Auditoría técnica automatizada: Matriz completa de consentimientos y desglose DMA / Google Consent Mode v2")
+# Interfaz Streamlit
+st.markdown("<h1 style='margin-bottom: 2px;'>🛡️ Privacy & Consent Mode v2 Auditor</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense de cookies y señales DMA / Google Consent Mode v2</p>", unsafe_allow_html=True)
 
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = None
@@ -308,30 +571,28 @@ if "domain" not in st.session_state:
 
 c_input, c_btn = st.columns([4, 1])
 with c_input:
-    target_url = st.text_input("Introduce la URL a auditar:", placeholder="https://es.art-hotel-commercianti.com/")
+    target_url = st.text_input("URL a auditar:", placeholder="https://es.art-hotel-commercianti.com/", label_visibility="collapsed")
 with c_btn:
-    st.write("")
-    st.write("")
-    btn_start = st.button("🚀 Iniciar Auditoría", type="primary", use_container_width=True)
+    btn_start = st.button("⚡ Iniciar Auditoría", type="primary", use_container_width=True)
 
 if btn_start:
     if not target_url.strip().startswith("http"):
         st.error("Introduce una URL completa con https:// o http://")
     else:
         st.session_state.domain = urlparse(target_url).netloc
-        progreso = st.progress(0, text="Iniciando navegador...")
+        progreso = st.progress(0, text="Levantando sandbox en la nube...")
         
         async def ejecutar_pruebas():
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
                 
-                progreso.progress(10, text="[1/5] Fase 1: Estado Default...")
+                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings)...")
                 c_def, p_def, a_def = await auditar_fase(browser, target_url, action=None)
                 
-                progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas...")
+                progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas (Verificando bloqueo)...")
                 c_rej, p_rej, a_rej = await auditar_fase(browser, target_url, action="reject")
                 
-                progreso.progress(50, text="[3/5] Fase 3: Aceptar Todas...")
+                progreso.progress(50, text="[3/5] Fase 3: Aceptar Todas (Concesión total)...")
                 c_acc, p_acc, a_acc = await auditar_fase(browser, target_url, action="accept")
                 
                 progreso.progress(70, text="[4/5] Fase 4: Solo Analítica (Rendimiento)...")
@@ -341,7 +602,7 @@ if btn_start:
                 c_mkt, p_mkt, a_mkt = await auditar_fase(browser, target_url, action="only_marketing")
                 
                 await browser.close()
-                progreso.progress(100, text="¡Completado con éxito!")
+                progreso.progress(100, text="¡Telemetría finalizada con éxito!")
                 
                 return {
                     "default": {"cookies": c_def, "pings": p_def, "action": a_def},
@@ -360,12 +621,12 @@ if btn_start:
 if st.session_state.audit_data:
     data = st.session_state.audit_data
     domain = st.session_state.domain
-    st.success(f"¡Auditoría finalizada para {domain}!")
+    st.markdown(f"<div style='margin-bottom: 20px; font-weight: 600; color: #34d399;'>● Auditoría completada para: <span style='color: #f8fafc;'>{domain}</span></div>", unsafe_allow_html=True)
     
     t_cm, t_ck, t_doc = st.tabs(["📊 Google Consent Mode v2", "🍪 Cookies por Sección", "📄 Generar Informe Word"])
     
     with t_cm:
-        st.markdown("### Señales recolectadas en las 5 fases")
+        st.markdown("<h3 style='margin-bottom: 16px;'>Telemetría de Señales (5 Fases)</h3>", unsafe_allow_html=True)
         cols = st.columns(5)
         fases = [
             ("1. Default", 'default', "G100"),
@@ -378,32 +639,37 @@ if st.session_state.audit_data:
         parsed_fases = {}
         for col, (label, key, expected_gcs) in zip(cols, fases):
             with col:
-                st.markdown(f"**{label}**")
                 p = extract_consent_params(data[key]['pings'])
                 parsed_fases[key] = p
-                st.metric("GCS", p['gcs'])
                 
-                if expected_gcs in p['gcs']:
-                    st.caption(f"✅ Coincide con {expected_gcs}")
-                else:
-                    st.caption(f"⚠️ Esperado: {expected_gcs}")
-                    
-                st.code(f"GCD: {p['gcd']}\nNPA: {p['npa']} | DMA: {p['dma']}", language="text")
-                st.caption(f"Acción: {data[key]['action']}")
+                badge_html = f"<div class='cyber-badge-ok'>✓ Coincide {expected_gcs}</div>" if expected_gcs in p['gcs'] else f"<div class='cyber-badge-warn'>⚠ Esperado {expected_gcs}</div>"
                 
-        st.divider()
-        st.markdown("### 📋 Desglose detallado por Parámetros (Consent Mode v2)")
+                panel_html = f"""
+                <div class="cyber-panel">
+                    <div class="cyber-panel-title">{label}</div>
+                    <div class="cyber-panel-val">{p['gcs']}</div>
+                    {badge_html}
+                    <div class="cyber-console">
+                        GCD: {p['gcd']}<br>
+                        NPA: {p['npa']} | DMA: {p['dma']}
+                    </div>
+                    <div class="cyber-action">Acción: {data[key]['action']}</div>
+                </div>
+                """
+                st.markdown(panel_html, unsafe_allow_html=True)
+                
+        st.markdown("<br><h4 style='color: #cbd5e1;'>Matriz de Decodificación de Parámetros GCM v2</h4>", unsafe_allow_html=True)
         
         table_rows = []
         param_keys = [
             ("ad_storage", "Cookies publicitarias"),
             ("analytics_storage", "Cookies estadísticas/analítica"),
-            ("ad_user_data", "Envío de datos de usuario a Google Ads"),
+            ("ad_user_data", "Datos de usuario a Google Ads"),
             ("ad_personalization", "Personalización y Remarketing")
         ]
         
         for p_key, p_desc in param_keys:
-            row = {"Parámetro": f"{p_key} ({p_desc})"}
+            row = {"Parámetro GCM v2": f"{p_key} ({p_desc})"}
             for _, f_key, _ in fases:
                 gcd_info = parsed_fases[f_key]['gcd_params']
                 if gcd_info and p_key in gcd_info:
@@ -416,7 +682,7 @@ if st.session_state.audit_data:
         st.dataframe(
             table_rows,
             column_config={
-                "Parámetro": st.column_config.TextColumn("Parámetro GCM v2", width="medium"),
+                "Parámetro GCM v2": st.column_config.TextColumn("Parámetro GCM v2", width="medium"),
                 "default": "1. Default",
                 "reject": "2. Rechazar",
                 "accept": "3. Aceptar Todo",
@@ -428,6 +694,7 @@ if st.session_state.audit_data:
         )
 
     with t_ck:
+        st.markdown("<h3 style='margin-bottom: 16px;'>Inventario Forense de Cookies y Diagnóstico Legal</h3>", unsafe_allow_html=True)
         sec_names = {
             "default": "1. Aterrizaje Inicial (Default)",
             "reject": "2. Tras Rechazar Todas",
@@ -437,17 +704,44 @@ if st.session_state.audit_data:
         }
         sel_tab = st.selectbox("Selecciona la casuística a inspeccionar:", list(sec_names.keys()), format_func=lambda x: sec_names[x])
         c_list = data[sel_tab]['cookies']
-        st.write(f"Total cookies presentes: **{len(c_list)}**")
-        if c_list:
-            st.dataframe([{"Nombre": c['name'], "Dominio": c['domain'], "Expiración (Unix)": c['expires'], "Segura": c['secure']} for c in c_list], use_container_width=True)
+        
+        enriched_cookies = [enriquecer_cookie(c, sel_tab) for c in c_list]
+        total_infracciones = sum(1 for c in enriched_cookies if "❌" in c['Diagnóstico'])
+        
+        col_m1, col_m2 = st.columns([1, 4])
+        with col_m1:
+            st.metric("Total Cookies", len(c_list))
+        with col_m2:
+            if total_infracciones > 0:
+                st.markdown(f"<div style='margin-top: 14px; padding: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #f87171; font-weight: 600;'>⚠️ Se han detectado {total_infracciones} cookies en presunta infracción (instaladas sin el consentimiento legal exigido).</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div style='margin-top: 14px; padding: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: #34d399; font-weight: 600;'>✅ No se detectan anomalías de consentimiento en las cookies de esta fase.</div>", unsafe_allow_html=True)
+
+        st.write("")
+        if enriched_cookies:
+            st.dataframe(
+                enriched_cookies,
+                column_config={
+                    "Nombre": st.column_config.TextColumn("Nombre Cookie", width="medium"),
+                    "Proveedor": st.column_config.TextColumn("Proveedor / Origen", width="medium"),
+                    "Duración": st.column_config.TextColumn("Duración", width="small"),
+                    "Categoría en Web": st.column_config.TextColumn("Cómo está en Web", width="medium"),
+                    "Categoría Debería Ser": st.column_config.TextColumn("Categoría Recomendada", width="medium"),
+                    "Diagnóstico": st.column_config.TextColumn("Diagnóstico", width="medium"),
+                },
+                use_container_width=True,
+                hide_index=True
+            )
         else:
             st.info("No hay cookies guardadas en esta fase.")
 
     with t_doc:
+        st.markdown("<h3 style='margin-bottom: 16px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #94a3b8;'>Exporta el informe en formato Word estructurado con todas las tablas comparativas y el inventario técnico listo para enviar a cliente o adjuntar en auditoría.</p>", unsafe_allow_html=True)
         doc_bytes = generar_documento_word(domain, data)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(
-            label=f"📥 Descargar: {nombre_archivo}",
+            label=f"📥 Descargar Informe Completo (.docx)",
             data=doc_bytes,
             file_name=nombre_archivo,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

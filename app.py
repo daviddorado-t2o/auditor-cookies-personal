@@ -4,6 +4,8 @@ from playwright.async_api import async_playwright
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from urllib.parse import urlparse, parse_qs
+import urllib.request
+import csv
 import io
 import os
 import re
@@ -155,162 +157,136 @@ def ensure_playwright():
 ensure_playwright()
 
 # ==============================================================================
-# MOTOR FORENSE DE COOKIES: BASE CANÓNICA DE PROVEEDORES Y CATEGORÍAS
+# MOTOR FORENSE: SINCRONIZACIÓN CON BASE DE DATOS MUNDIAL (OPEN COOKIE DATABASE)
 # ==============================================================================
 
-EXACT_COOKIES = {
-    # --- Cloudflare (Infraestructura, Seguridad y CDN) ---
-    "_cf_ob": ("Cloudflare (Always Online / Resiliencia de Servidor)", "Técnica / Necesaria"),
-    "cf_ob_info": ("Cloudflare (Diagnóstico Always Online)", "Técnica / Necesaria"),
-    "cf_use_ob": ("Cloudflare (Caché de contingencia Always Online)", "Técnica / Necesaria"),
-    "__cf_bm": ("Cloudflare (Gestión de bots y mitigación automatizada)", "Técnica / Necesaria"),
-    "cf_clearance": ("Cloudflare (Validación de desafío anti-DDoS / Captcha)", "Técnica / Necesaria"),
-    "_cfuvid": ("Cloudflare (Rate Limiting por usuario único)", "Técnica / Necesaria"),
-    "__cflb": ("Cloudflare (Persistencia de balanceo de carga)", "Técnica / Necesaria"),
-    "__cfduid": ("Cloudflare (Identificador heredado de confianza)", "Técnica / Necesaria"),
-    
-    # --- Frameworks y Servidores Web (Gestión de Sesión e Idioma) ---
-    "sessionid": ("Framework Django / Python (Sesión autenticada de usuario)", "Técnica / Necesaria"),
-    "django_language": ("Framework Django (Preferencia de idioma del usuario)", "Técnica / Necesaria"),
-    "csrftoken": ("Framework Django / Seguridad Web (Prevención de ataques CSRF)", "Técnica / Necesaria"),
-    "phpsessid": ("Servidor PHP (Gestor de sesión nativa)", "Técnica / Necesaria"),
-    "jsessionid": ("Servidor Java / Spring / Tomcat (Gestor de sesión)", "Técnica / Necesaria"),
-    "asp.net_sessionid": ("Servidor Microsoft ASP.NET (Sesión de navegación)", "Técnica / Necesaria"),
-    "xsrf-token": ("Seguridad Web (Protección CSRF en frameworks frontend)", "Técnica / Necesaria"),
-    "laravel_session": ("Framework Laravel / PHP (Sesión cifrada de usuario)", "Técnica / Necesaria"),
-    "connect.sid": ("Node.js / Express (Sesión Express-Session)", "Técnica / Necesaria"),
-    
-    # --- CMS y Tiendas Online ---
-    "woocommerce_cart_hash": ("WooCommerce (Caché y cálculo del carrito de compra)", "Técnica / Necesaria"),
-    "woocommerce_items_in_cart": ("WooCommerce (Contador de productos en carrito)", "Técnica / Necesaria"),
-    "wp_woocommerce_session": ("WooCommerce (Persistencia del carrito de compras)", "Técnica / Necesaria"),
-    "prestashop": ("PrestaShop (Sesión técnica de tienda online)", "Técnica / Necesaria"),
-    "mage-cache-sessid": ("Magento / Adobe Commerce (Sesión de caché)", "Técnica / Necesaria"),
-    "private_content_version": ("Magento (Control de versiones de contenido privado)", "Técnica / Necesaria"),
-    
-    # --- Gestores de Consentimiento (CMPs) ---
-    "cookiescriptconsent": ("CookieScript (Almacenamiento de preferencias del usuario)", "Técnica / Necesaria"),
-    "optanonconsent": ("OneTrust (Registro oficial de categorías aceptadas)", "Técnica / Necesaria"),
-    "optanonalertboxclosed": ("OneTrust (Estado de cierre del banner de aviso)", "Técnica / Necesaria"),
-    "cookieyes-consent": ("CookieYes (Estado de aceptación de categorías)", "Técnica / Necesaria"),
-    "cky-consent": ("CookieYes (Hash de consentimiento y auditoría)", "Técnica / Necesaria"),
-    "cookieconsent_status": ("Cookie Consent / Osano (Estado del banner)", "Técnica / Necesaria"),
-    "didomi_token": ("Didomi CMP (Token de consentimiento de privacidad)", "Técnica / Necesaria"),
-    "euconsent-v2": ("IAB Europe TCF v2.2 (Cadena oficial de consentimiento)", "Técnica / Necesaria"),
-    
-    # --- Balanceadores & CDNs ---
-    "awsalb": ("Amazon Web Services (Enrutamiento de balanceador ALB)", "Técnica / Necesaria"),
-    "awsalbcors": ("Amazon Web Services (Control CORS en balanceador ALB)", "Técnica / Necesaria"),
-    "aka_a2": ("Akamai CDN (Optimización de velocidad y entrega de contenidos)", "Técnica / Necesaria"),
-    
-    # --- Analítica & Rendimiento ---
-    "_ga": ("Google Analytics 4 (Identificador único de cliente / CID)", "Analítica / Rendimiento"),
-    "_gid": ("Google Analytics (Identificador de sesión de 24 horas)", "Analítica / Rendimiento"),
-    "_gat": ("Google Analytics (Limitador técnico de tasa de solicitudes)", "Analítica / Rendimiento"),
-    "_clck": ("Microsoft Clarity (ID único de usuario para mapas de calor)", "Analítica / Rendimiento"),
-    "_clsk": ("Microsoft Clarity (Registro de página vista y sesión activa)", "Analítica / Rendimiento"),
-    "clid": ("Microsoft Clarity (ID de cliente analítico)", "Analítica / Rendimiento"),
-    "vuid": ("Vimeo Player (Telemetría de reproducción y métricas de vídeo)", "Analítica / Rendimiento"),
-    
-    # --- Publicidad & Marketing ---
-    "_fbp": ("Meta Pixel (Identificador de navegador para eventos publicitarios)", "Marketing / Publicidad"),
-    "_fbc": ("Meta Pixel (Parámetro fbclid para atribución de anuncios)", "Marketing / Publicidad"),
-    "fr": ("Meta / Facebook (Entrega de anuncios y retargeting)", "Marketing / Publicidad"),
-    "ide": ("Google DoubleClick (Segmentación y remarketing cross-domain)", "Marketing / Publicidad"),
-    "test_cookie": ("Google DoubleClick (Comprobación de soporte de cookies)", "Marketing / Publicidad"),
-    "__gads": ("Google Ad Manager (Servicio de publicidad y frecuencia de anuncios)", "Marketing / Publicidad"),
-    "__gpi": ("Google Publisher Tag (Identificador de editor de Google)", "Marketing / Publicidad"),
-    "_gcl_au": ("Google AdSense / Ads (Atribución previa a la conversión)", "Marketing / Publicidad"),
-    "_gcl_aw": ("Google Ads (Atribución tras clic en anuncio)", "Marketing / Publicidad"),
-    "_gcl_dc": ("Google Ads / Floodlight (Medición de conversiones)", "Marketing / Publicidad"),
-    "nid": ("Google LLC (Perfil publicitario personalizado en servicios Google)", "Marketing / Publicidad"),
-    "muid": ("Microsoft Advertising / Bing Ads (Conversiones y perfiles de usuario)", "Marketing / Publicidad"),
-    "_uetsid": ("Microsoft Advertising (ID de sesión para Universal Event Tracking)", "Marketing / Publicidad"),
-    "_uetvid": ("Microsoft Advertising (ID persistente de usuario Bing Ads)", "Marketing / Publicidad"),
-    "personalization_id": ("Twitter / X (Personalización y seguimiento publicitario)", "Marketing / Publicidad"),
-    "guest_id": ("Twitter / X (Identificación de visitantes para anuncios)", "Marketing / Publicidad"),
-    "bcookie": ("LinkedIn (Identificador de navegador para seguimiento B2B)", "Marketing / Publicidad"),
-    "bscookie": ("LinkedIn (Autenticación y seguimiento de anuncios)", "Marketing / Publicidad"),
-    "lidc": ("LinkedIn (Enrutamiento para optimización del píxel publicitario)", "Marketing / Publicidad"),
-    "cto_bundle": ("Criteo (Retargeting dinámico cross-device)", "Marketing / Publicidad")
+CATEGORY_MAP = {
+    'functional': 'Técnica / Necesaria',
+    'analytics': 'Analítica / Rendimiento',
+    'marketing': 'Marketing / Publicidad',
+    'security': 'Técnica / Necesaria',
+    'personalization': 'Personalización / Funcional'
 }
 
-# Patrones Regex anclados con alta especificidad
-REGEX_PATTERNS = [
-    # Familia Cloudflare
-    (r'^_?cf(_.*)?$', "Cloudflare (Infraestructura, Seguridad y CDN)", "Técnica / Necesaria"),
-    
-    # Propiedades GA4 (_ga_XXXXXXXXXX) y variantes
-    (r'^_ga_[a-zA-Z0-9_]+$', "Google Analytics 4 (Medición de flujo web / Sesión de datos)", "Analítica / Rendimiento"),
-    (r'^_gat_.*$', "Google Analytics (Regulación de peticiones)", "Analítica / Rendimiento"),
-    (r'^__utm[a-z]$', "Google Analytics Universal (Métricas de tráfico heredadas)", "Analítica / Rendimiento"),
-    
-    # Hotjar
-    (r'^_hj(Session|SessionUser|IncludedIn|AbsoluteCanonicalUrl|TLDTest|id|FirstSeen).*$', "Hotjar (Mapas de calor y comportamiento del usuario)", "Analítica / Rendimiento"),
-    
-    # Matomo / Piwik
-    (r'^(_pk_|pk_)(id|ses|ref|cvar).*$', "Matomo / Piwik (Analítica web autohospedada)", "Analítica / Rendimiento"),
-    
-    # Yandex Metrica
-    (r'^_ym_.*$', "Yandex Metrica (Analítica y mapas de calor)", "Analítica / Rendimiento"),
-    
-    # TikTok Pixel
-    (r'^(tt_|ttp|_ttp).*$', "TikTok Pixel (Seguimiento de conversiones y remarketing)", "Marketing / Publicidad"),
-    
-    # Criteo
-    (r'^cto_.*$', "Criteo (Red publicitaria y retargeting dinámico)", "Marketing / Publicidad"),
-    
-    # Bing / Microsoft Ads
-    (r'^_uet.*$', "Microsoft Advertising (Universal Event Tracking)", "Marketing / Publicidad"),
-    
-    # WordPress CMS
-    (r'^(wp-|wordpress_).*$', "WordPress CMS (Control de sesión de usuario y panel)", "Técnica / Necesaria"),
-    (r'^(pll_|icl_).*$', "Módulo Multi-idioma (Polylang / WPML)", "Técnica / Necesaria")
-]
+# Base de conocimiento pre-cargada con descripciones en español
+BUILTIN_DB = {
+    "__cf_ob": ("Cloudflare", "Técnica / Necesaria", "Always Online: Ofrece copia en caché del sitio si el servidor web no responde."),
+    "_cf_ob": ("Cloudflare", "Técnica / Necesaria", "Always Online: Resiliencia del sitio ante caídas del servidor de origen."),
+    "cf_ob_info": ("Cloudflare", "Técnica / Necesaria", "Diagnóstico de respuesta y caché de contingencia Always Online."),
+    "cf_use_ob": ("Cloudflare", "Técnica / Necesaria", "Control de redirección hacia la copia estática Always Online."),
+    "__cf_bm": ("Cloudflare", "Técnica / Necesaria", "Bot Management: Gestiona el tráfico entrante para bloquear bots maliciosos."),
+    "_cf_bm": ("Cloudflare", "Técnica / Necesaria", "Bot Management: Mitigación de scraping y peticiones automáticas."),
+    "cf_clearance": ("Cloudflare", "Técnica / Necesaria", "Almacena la validación de haber superado un desafío Captcha o control de seguridad."),
+    "_cfuvid": ("Cloudflare", "Técnica / Necesaria", "Rate Limiting: Protección contra ataques por denegación de servicio a nivel de usuario."),
+    "__cflb": ("Cloudflare", "Técnica / Necesaria", "Balanceo de carga: Asigna el usuario al mismo servidor en sesiones activas."),
+    "sessionid": ("Framework Django / Python", "Técnica / Necesaria", "Identificador de sesión autenticada y navegación segura del usuario."),
+    "django_language": ("Framework Django", "Técnica / Necesaria", "Almacena la selección de idioma preferido por el visitante."),
+    "csrftoken": ("Seguridad Web", "Técnica / Necesaria", "Token de protección criptográfica contra ataques Cross-Site Request Forgery."),
+    "phpsessid": ("Servidor PHP", "Técnica / Necesaria", "Conserva las variables de sesión del usuario en el servidor."),
+    "jsessionid": ("Servidor Java / Spring", "Técnica / Necesaria", "Vincula al usuario con su sesión activa en el servidor de aplicaciones."),
+    "asp.net_sessionid": ("Servidor Microsoft ASP.NET", "Técnica / Necesaria", "Mantiene la sesión de usuario activa entre peticiones HTTP."),
+    "cookiescriptconsent": ("CookieScript (CMP)", "Técnica / Necesaria", "Registra las categorías de cookies que el usuario ha autorizado."),
+    "optanonconsent": ("OneTrust (CMP)", "Técnica / Necesaria", "Almacena el estado granular del consentimiento del usuario."),
+    "optanonalertboxclosed": ("OneTrust (CMP)", "Técnica / Necesaria", "Indica si el usuario ha interactuado y cerrado el aviso de cookies."),
+    "cookieyes-consent": ("CookieYes (CMP)", "Técnica / Necesaria", "Guarda el registro de consentimiento para auditoría de privacidad."),
+    "didomi_token": ("Didomi (CMP)", "Técnica / Necesaria", "Token de consentimiento cifrado según el estándar IAB TCF v2.2."),
+    "_ga": ("Google Analytics 4", "Analítica / Rendimiento", "Asigna un ID pseudo-anónimo único para distinguir usuarios e interacciones."),
+    "_gid": ("Google Analytics", "Analítica / Rendimiento", "Registra un identificador temporal de 24 horas para métricas de sesión."),
+    "_gat": ("Google Analytics", "Analítica / Rendimiento", "Limita el porcentaje de solicitudes para evitar la saturación de datos."),
+    "_clck": ("Microsoft Clarity", "Analítica / Rendimiento", "Identificador de usuario para análisis de navegación y mapas de calor."),
+    "_clsk": ("Microsoft Clarity", "Analítica / Rendimiento", "Agrupa las páginas vistas de un mismo usuario dentro de una única sesión."),
+    "vuid": ("Vimeo Player", "Analítica / Rendimiento", "Mide el rendimiento del reproductor de vídeo y estadísticas de visualización."),
+    "_fbp": ("Meta Pixel (Facebook)", "Marketing / Publicidad", "Registra visitas entre sitios web para entregar anuncios dirigidos en redes de Meta."),
+    "_fbc": ("Meta Pixel (Facebook)", "Marketing / Publicidad", "Almacena el identificador del clic publicitario (fbclid) para atribución."),
+    "ide": ("Google DoubleClick", "Marketing / Publicidad", "Registra y reporta las acciones del usuario tras ver o hacer clic en anuncios."),
+    "test_cookie": ("Google DoubleClick", "Marketing / Publicidad", "Comprueba si el navegador del usuario tiene habilitada la escritura de cookies."),
+    "__gads": ("Google Ad Manager", "Marketing / Publicidad", "Controla la frecuencia de los anuncios y la eficacia de las campañas."),
+    "__gpi": ("Google Publisher Tag", "Marketing / Publicidad", "Identificador de editor de Google para personalización y frecuencia."),
+    "_gcl_au": ("Google AdSense / Ads", "Marketing / Publicidad", "Medición de conversiones y pruebas de eficacia de la red publicitaria."),
+    "_gcl_aw": ("Google Ads", "Marketing / Publicidad", "Atribuye la conversión generada por un usuario tras hacer clic en un anuncio."),
+    "nid": ("Google LLC", "Marketing / Publicidad", "Construye un perfil de intereses del usuario para mostrar anuncios personalizados."),
+    "muid": ("Microsoft Advertising (Bing)", "Marketing / Publicidad", "Sincroniza el ID de usuario entre dominios de Microsoft para campañas.")
+}
 
-# Identificación por dominio emisor (cuando el nombre es opaco)
-DOMAIN_PATTERNS = [
-    (r'cloudflare\.com$', "Cloudflare Inc.", "Técnica / Necesaria"),
-    (r'doubleclick\.net$', "Google DoubleClick", "Marketing / Publicidad"),
-    (r'facebook\.com$', "Meta Platforms Inc.", "Marketing / Publicidad"),
-    (r'vimeo\.com$', "Vimeo Inc. (Reproductor embebido)", "Analítica / Rendimiento"),
-    (r'clarity\.ms$', "Microsoft Clarity", "Analítica / Rendimiento"),
-    (r'hotjar\.com$', "Hotjar Ltd.", "Analítica / Rendimiento"),
-    (r'cookie-script\.com$', "CookieScript CMP", "Técnica / Necesaria"),
-    (r'onetrust\.com$', "OneTrust CMP", "Técnica / Necesaria")
-]
+@st.cache_data(ttl=86400, show_spinner=False)
+def obtener_base_datos_global():
+    exact_db = dict(BUILTIN_DB)
+    wildcard_list = [
+        ("_{0,2}cf.*", "Cloudflare", "Técnica / Necesaria", "Infraestructura, mitigación de bots y aceleración de red CDN."),
+        ("_ga_.*", "Google Analytics 4", "Analítica / Rendimiento", "Almacena el estado de sesión y flujo de eventos en la propiedad GA4."),
+        ("_gat_.*", "Google Analytics", "Analítica / Rendimiento", "Regulación técnica de peticiones al endpoint de analítica."),
+        ("_hj.*", "Hotjar", "Analítica / Rendimiento", "Mapas de calor y análisis de interacción del usuario en la interfaz."),
+        ("_pk_.*", "Matomo / Piwik", "Analítica / Rendimiento", "Analítica web autoalojada y seguimiento de visitas."),
+        ("_uet.*", "Microsoft Advertising", "Marketing / Publicidad", "Universal Event Tracking para seguimiento de conversiones en Bing."),
+        ("tt_.*", "TikTok Pixel", "Marketing / Publicidad", "Seguimiento publicitario y optimización de campañas de TikTok."),
+        ("cto_.*", "Criteo", "Marketing / Publicidad", "Retargeting publicitario dinámico y entrega de anuncios."),
+        ("wp-.*", "WordPress CMS", "Técnica / Necesaria", "Gestión de sesión administrativa y preferencias de la interfaz WordPress."),
+        ("woocommerce_.*", "WooCommerce", "Técnica / Necesaria", "Persistencia de productos y cálculo del carrito de compra."),
+        ("pll_.*", "Polylang", "Técnica / Necesaria", "Mantenimiento del idioma activo durante la navegación.")
+    ]
+    
+    # Sincronización en vivo con el repositorio oficial Open Cookie Database
+    url = "https://raw.githubusercontent.com/jkwakman/Open-Cookie-Database/master/open-cookie-database.csv"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=6) as response:
+            content = response.read().decode('utf-8')
+            reader = csv.DictReader(io.StringIO(content))
+            for row in reader:
+                c_name = row.get('Cookie / Data Key name', '').strip()
+                if not c_name:
+                    continue
+                platform = row.get('Platform', 'Proveedor Web').strip()
+                raw_cat = row.get('Category', 'Functional').strip().lower()
+                cat = CATEGORY_MAP.get(raw_cat, 'Técnica / Necesaria')
+                desc = row.get('Description', '').strip() or 'Finalidad técnica estándar registrada en Open Cookie Database.'
+                is_wildcard = row.get('Wildcard', '0').strip() == '1' or c_name.endswith('*')
+                
+                clean = c_name.rstrip('*').lower()
+                if is_wildcard:
+                    wildcard_list.append((f"^{clean}.*", platform, cat, desc))
+                else:
+                    if clean not in exact_db:
+                        exact_db[clean] = (platform, cat, desc)
+    except Exception:
+        pass
+        
+    return exact_db, wildcard_list
 
-# Heurística morfológica por palabras clave
-KEYWORD_PATTERNS = [
-    (r'.*(sess|csrf|token|auth|security|login|nonce|checkout|cart|carrito|pedido|lang|idioma).*', "Propio (Sesión, Seguridad o Idioma)", "Técnica / Necesaria"),
-    (r'.*(analy|metric|stats|pageview|visitor|tracker|heatmap).*', "Herramienta de Analítica / Estadísticas", "Analítica / Rendimiento"),
-    (r'.*(pixel|banner|campaign|camp|promo|retarget|adserver|affiliate).*', "Red Publicitaria / Seguimiento", "Marketing / Publicidad")
-]
-
-def identificar_cookie_avanzada(name, domain):
+def consultar_proposito_cookie(name, domain, exact_db, wildcard_list):
     n = name.strip().lower()
     d = domain.strip().lower()
     
     # 1. Búsqueda exacta
-    if n in EXACT_COOKIES:
-        return EXACT_COOKIES[n]
+    if n in exact_db:
+        return exact_db[n]
         
-    # 2. Búsqueda por patrón de nombre
-    for regex, prov, cat in REGEX_PATTERNS:
-        if re.match(regex, n, re.IGNORECASE):
-            return prov, cat
+    # 2. Búsqueda por patrón / wildcard
+    for pattern, prov, cat, desc in wildcard_list:
+        if re.match(pattern, n, re.IGNORECASE):
+            return prov, cat, desc
             
-    # 3. Búsqueda por dominio emisor
-    for dom_regex, prov, cat in DOMAIN_PATTERNS:
+    # 3. Deducción por dominio emisor
+    domain_rules = [
+        (r'cloudflare\.com$', "Cloudflare Inc.", "Técnica / Necesaria", "Seguridad perimetral y entrega de contenidos en red CDN."),
+        (r'doubleclick\.net$', "Google DoubleClick", "Marketing / Publicidad", "Publicidad programática y optimización de pujas."),
+        (r'facebook\.com$', "Meta Platforms Inc.", "Marketing / Publicidad", "Píxel de seguimiento social y optimización de audiencias."),
+        (r'vimeo\.com$', "Vimeo Inc.", "Analítica / Rendimiento", "Métricas del reproductor embebido de vídeo."),
+        (r'clarity\.ms$', "Microsoft Clarity", "Analítica / Rendimiento", "Telemetría y análisis de experiencia de usuario.")
+    ]
+    for dom_regex, prov, cat, desc in domain_rules:
         if re.search(dom_regex, d):
-            return f"{prov} (Dominio de red)", cat
+            return prov, cat, desc
             
-    # 4. Análisis morfológico contextual
-    for kw_regex, prov, cat in KEYWORD_PATTERNS:
-        if re.match(kw_regex, n, re.IGNORECASE):
-            return f"{prov} ({domain})", cat
-            
-    return f"Propietario / Sin firma ({domain})", "Por categorizar"
+    # 4. Reglas morfológicas contextuales
+    if re.search(r'(sess|csrf|token|auth|security|login|nonce|checkout|cart|carrito|pedido|lang|idioma)', n):
+        return f"Propio ({domain})", "Técnica / Necesaria", "Sesión de usuario, seguridad de formularios o preferencia lingüística."
+    if re.search(r'(analy|metric|stats|pageview|visitor|tracker|heatmap)', n):
+        return f"Tercero Analítico ({domain})", "Analítica / Rendimiento", "Medición de audiencia y analítica de navegación."
+    if re.search(r'(pixel|banner|campaign|camp|promo|retarget|adserver|affiliate)', n):
+        return f"Red Publicitaria ({domain})", "Marketing / Publicidad", "Seguimiento publicitario y medición de campañas."
+
+    return f"Propietario / Sin firma ({domain})", "Por categorizar", "Finalidad específica no indexada en repositorios públicos."
 
 def calcular_duracion(expires_unix):
     if not expires_unix or expires_unix == -1 or expires_unix <= 0:
@@ -330,16 +306,16 @@ def calcular_duracion(expires_unix):
         anos = round(dias / 365, 1)
         return "1 año" if anos == 1.0 else f"{anos:g} años"
 
-def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, marketing_new):
+def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list):
     name = cookie.get('name', '')
     domain = cookie.get('domain', '')
     expires = cookie.get('expires', -1)
     duracion = calcular_duracion(expires)
     
-    prov, cat_recomendada = identificar_cookie_avanzada(name, domain)
+    prov, cat_recomendada, proposito = consultar_proposito_cookie(name, domain, exact_db, wildcard_list)
     is_in_baseline = name in baseline_names
     
-    # Cotejo diferencial: ¿cómo trata la web realmente a esta cookie?
+    # Cotejo diferencial: evaluación del comportamiento real en la web
     if is_in_baseline:
         if phase_key in ['default', 'reject']:
             cat_web = "Técnica / Exenta (Carga Previa)"
@@ -360,7 +336,7 @@ def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, 
         if "Analítica" in cat_recomendada or "Marketing" in cat_recomendada:
             diagnostico = "❌ Infracción (Fuga sin consentimiento previo)"
         elif cat_recomendada == "Por categorizar":
-            diagnostico = "⚠️ Por verificar (Sospecha de fuga no técnica)"
+            diagnostico = "⚠️ Por verificar (Sospecha de fuga)"
         else:
             diagnostico = "✅ Conforme (Técnica autorizada)"
     elif phase_key == 'analytics':
@@ -387,6 +363,7 @@ def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, 
     return {
         "Nombre": name,
         "Proveedor": prov,
+        "Propósito / Finalidad": proposito,
         "Duración": duracion,
         "Categoría en Web": cat_web,
         "Categoría Debería Ser": cat_recomendada,
@@ -396,7 +373,7 @@ def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, 
     }
 
 # ==============================================================================
-# DECODIFICACIÓN DE PARÁMETROS CONSENT MODE V2
+# TELEMETRÍA GOOGLE CONSENT MODE V2
 # ==============================================================================
 
 def is_google_consent_ping(url_str):
@@ -481,14 +458,10 @@ def extract_consent_params(pings):
         'gcd_params': gcd_decoded
     }
 
-# ==============================================================================
-# INTERACCIÓN AUTOMATIZADA CON PRINCIPALES CMPS
-# ==============================================================================
-
 async def interactuar_con_cmp(page, target_action):
     js_action = """
     async (mode) => {
-        // === 1. APIS NATIVAS ===
+        // 1. APIS NATIVAS
         if (window.CookieScript && window.CookieScript.instance) {
             try {
                 if (mode === 'accept') { window.CookieScript.instance.acceptAllAction(); return "API CookieScript: acceptAllAction"; }
@@ -510,7 +483,7 @@ async def interactuar_con_cmp(page, target_action):
             } catch(e) {}
         }
 
-        // === 2. BOTONES DIRECTOS (CAPA 1) ===
+        // 2. BOTONES DIRECTOS (CAPA 1)
         if (mode === 'accept') {
             const acceptSelectors = [
                 '#cookiescript_accept',
@@ -557,7 +530,7 @@ async def interactuar_con_cmp(page, target_action):
             }
         }
 
-        // === 3. SEGUNDA CAPA (GRANULAR: ANALYTICS / MARKETING) ===
+        // 3. SEGUNDA CAPA (CONFIGURACIÓN GRANULAR)
         const openManageSelectors = [
             '#cookiescript_manage',
             '#onetrust-pc-btn-handler',
@@ -682,10 +655,10 @@ async def auditar_fase(browser, url, action=None):
     return cookies, pings, action_info
 
 # ==============================================================================
-# GENERACIÓN DEL INFORME WORD
+# GENERACIÓN DE DOCUMENTO WORD
 # ==============================================================================
 
-def generar_documento_word(domain, audit_data, baseline_names, analytics_new, marketing_new):
+def generar_documento_word(domain, audit_data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list):
     doc = Document()
     doc.add_heading('AUDITORÍA TÉCNICA PRIVACY & CONSENT MODE V2', 0)
     doc.add_paragraph('Octubre 2026')
@@ -735,25 +708,27 @@ def generar_documento_word(domain, audit_data, baseline_names, analytics_new, ma
         doc.add_heading(tit, 2)
         cookies = audit_data[k]['cookies']
         if cookies:
-            c_table = doc.add_table(rows=1, cols=6)
+            c_table = doc.add_table(rows=1, cols=7)
             c_table.alignment = WD_TABLE_ALIGNMENT.CENTER
             chdr = c_table.rows[0].cells
             chdr[0].text = "Nombre"
             chdr[1].text = "Proveedor"
-            chdr[2].text = "Duración"
-            chdr[3].text = "Cat. en Web"
-            chdr[4].text = "Debería Ser"
-            chdr[5].text = "Diagnóstico"
+            chdr[2].text = "Propósito / Finalidad"
+            chdr[3].text = "Duración"
+            chdr[4].text = "Cat. en Web"
+            chdr[5].text = "Debería Ser"
+            chdr[6].text = "Diagnóstico"
             
             for c in cookies:
-                c_info = enriquecer_cookie_forense(c, k, baseline_names, analytics_new, marketing_new)
+                c_info = enriquecer_cookie_forense(c, k, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list)
                 r_cells = c_table.add_row().cells
                 r_cells[0].text = c_info['Nombre']
                 r_cells[1].text = c_info['Proveedor']
-                r_cells[2].text = c_info['Duración']
-                r_cells[3].text = c_info['Categoría en Web']
-                r_cells[4].text = c_info['Categoría Debería Ser']
-                r_cells[5].text = c_info['Diagnóstico']
+                r_cells[2].text = c_info['Propósito / Finalidad']
+                r_cells[3].text = c_info['Duración']
+                r_cells[4].text = c_info['Categoría en Web']
+                r_cells[5].text = c_info['Categoría Debería Ser']
+                r_cells[6].text = c_info['Diagnóstico']
         else:
             doc.add_paragraph("No se detectaron cookies registradas.")
 
@@ -763,11 +738,13 @@ def generar_documento_word(domain, audit_data, baseline_names, analytics_new, ma
     return doc_io
 
 # ==============================================================================
-# INTERFAZ STREAMLIT
+# INTERFAZ DE USUARIO STREAMLIT
 # ==============================================================================
 
 st.markdown("<h1 style='margin-bottom: 2px;'>🛡️ Privacy & Consent Mode v2 Auditor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense diferencial de cookies y señales DMA / Google Consent Mode v2</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense mediante Open Cookie Database y señales DMA / Google Consent Mode v2</p>", unsafe_allow_html=True)
+
+exact_db, wildcard_list = obtener_base_datos_global()
 
 if "audit_data" not in st.session_state:
     st.session_state.audit_data = None
@@ -791,7 +768,7 @@ if btn_start:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
                 
-                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings y cookies técnicas)...")
+                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings y cookies base)...")
                 c_def, p_def, a_def = await auditar_fase(browser, target_url, action=None)
                 
                 progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas (Verificando bloqueo)...")
@@ -918,7 +895,7 @@ if st.session_state.audit_data:
         sel_tab = st.selectbox("Selecciona la casuística a inspeccionar:", list(sec_names.keys()), format_func=lambda x: sec_names[x])
         c_list = data[sel_tab]['cookies']
         
-        enriched_cookies = [enriquecer_cookie_forense(c, sel_tab, baseline_names, analytics_new, marketing_new) for c in c_list]
+        enriched_cookies = [enriquecer_cookie_forense(c, sel_tab, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list) for c in c_list]
         total_infracciones = sum(1 for c in enriched_cookies if "❌" in c['Diagnóstico'])
         
         col_m1, col_m2 = st.columns([1, 4])
@@ -937,9 +914,10 @@ if st.session_state.audit_data:
                 column_config={
                     "Nombre": st.column_config.TextColumn("Nombre Cookie", width="medium"),
                     "Proveedor": st.column_config.TextColumn("Proveedor / Origen", width="medium"),
+                    "Propósito / Finalidad": st.column_config.TextColumn("Propósito Registrado", width="large"),
                     "Duración": st.column_config.TextColumn("Duración", width="small"),
                     "Categoría en Web": st.column_config.TextColumn("Cómo la gestiona la Web", width="medium"),
-                    "Categoría Debería Ser": st.column_config.TextColumn("Categoría Canónica Recomendada", width="medium"),
+                    "Categoría Debería Ser": st.column_config.TextColumn("Categoría Canónica", width="medium"),
                     "Diagnóstico": st.column_config.TextColumn("Diagnóstico Legal", width="medium"),
                 },
                 use_container_width=True,
@@ -951,7 +929,7 @@ if st.session_state.audit_data:
     with t_doc:
         st.markdown("<h3 style='margin-bottom: 16px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
         st.markdown("<p style='color: #94a3b8;'>Exporta el informe en formato Word estructurado con todas las tablas comparativas y el inventario técnico listo para enviar a cliente o adjuntar en auditoría.</p>", unsafe_allow_html=True)
-        doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new)
+        doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(
             label=f"📥 Descargar Informe Completo (.docx)",

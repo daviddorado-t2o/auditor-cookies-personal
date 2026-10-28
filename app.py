@@ -126,6 +126,17 @@ h1, h2, h3, h4 {
     margin-bottom: 10px;
 }
 
+/* Banner de Recomendación Estratégica */
+.rec-box {
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(2, 132, 199, 0.12) 100%);
+    border: 1px solid #00f0ff;
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-top: 18px;
+    margin-bottom: 24px;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+}
+
 /* Inputs de texto */
 .stTextInput > div > div > input {
     background-color: #0f1626 !important;
@@ -157,9 +168,7 @@ h1, h2, h3, h4 {
     color: #000000 !important;
 }
 
-/* ==================================================================== */
-/* SISTEMA DE PESTAÑAS (st.radio) DE ALTO CONTRASTE */
-/* ==================================================================== */
+/* Sistema de Pestañas persistente con st.radio */
 div[data-testid="stRadio"] > label {
     display: none !important;
 }
@@ -172,7 +181,6 @@ div[data-testid="stRadio"] > div {
     margin-bottom: 24px;
     background: transparent;
 }
-/* Ocultar círculo de radio nativo */
 div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {
     display: none !important;
 }
@@ -194,7 +202,6 @@ div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
 div[data-testid="stRadio"] div[role="radiogroup"] > label:hover p {
     color: #00f0ff !important;
 }
-/* TEXTO PESTAÑA INACTIVA - Blanco / Plata de Alto Contraste */
 div[data-testid="stRadio"] div[role="radiogroup"] > label p {
     color: #e2e8f0 !important;
     font-weight: 700 !important;
@@ -202,7 +209,6 @@ div[data-testid="stRadio"] div[role="radiogroup"] > label p {
     margin: 0 !important;
     letter-spacing: 0.3px !important;
 }
-/* PESTAÑA ACTIVA - Resplandor Cian */
 div[data-testid="stRadio"] div[role="radiogroup"] > label[data-checked="true"],
 div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
     background-color: #162035 !important;
@@ -214,9 +220,7 @@ div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) p {
     color: #00f0ff !important;
 }
 
-/* ==================================================================== */
-/* SELECTBOX Y LABELS DE ALTO CONTRASTE */
-/* ==================================================================== */
+/* Selectbox */
 div[data-testid="stSelectbox"] label p {
     color: #cbd5e1 !important;
     font-size: 0.9rem !important;
@@ -450,6 +454,88 @@ def enriquecer_cookie_forense(cookie, phase_key, baseline_names, analytics_new, 
         "Diagnóstico": diagnostico,
         "Dominio": domain,
         "Segura": "Sí" if cookie.get('secure') else "No"
+    }
+
+# ==============================================================================
+# AUDITORÍA DE IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP
+# ==============================================================================
+
+def analizar_implementacion_cmp(cmp_data, raw_html):
+    detected_cmp = cmp_data.get('detectedCmp', 'No detectado')
+    cmp_src = cmp_data.get('cmpScriptSrc', '')
+    gtm_ids = cmp_data.get('gtmIds', [])
+    cmp_loc = cmp_data.get('cmpLocation', 'No localizado')
+    has_consent_script = cmp_data.get('hasConsentDefaultScript', False)
+    order = cmp_data.get('order', {})
+    
+    pos_consent = order.get('posConsent', -1)
+    pos_cmp = order.get('posCmp', -1)
+    pos_gtm = order.get('posGtm', -1)
+    
+    # Comprobar si está en el código fuente HTML original
+    is_hardcoded = False
+    if cmp_src and cmp_src in raw_html:
+        is_hardcoded = True
+    elif detected_cmp != "No detectado / Banner a medida" and any(k in raw_html.lower() for k in ['cookie-script.com', 'cookielaw.org', 'cookiebot.com', 'cookieyes.com', 'didomi.io', 'usercentrics']):
+        is_hardcoded = True
+        
+    if is_hardcoded:
+        metodo = "Código Fuente (Hardcoded en HTML)"
+        metodo_badge = "Código Fuente"
+        metodo_color = "#38bdf8"
+    elif len(gtm_ids) > 0 and (detected_cmp != "No detectado / Banner a medida"):
+        metodo = "Google Tag Manager (GTM) o Inyección Dinámica"
+        metodo_badge = "Vía GTM"
+        metodo_color = "#34d399"
+    else:
+        metodo = "No identificado con certeza"
+        metodo_badge = "Indeterminado"
+        metodo_color = "#94a3b8"
+
+    orden_items = []
+    
+    # 1. Consent Mode Default vs CMP
+    if pos_consent != -1 and pos_cmp != -1:
+        if pos_consent < pos_cmp:
+            orden_items.append(("✅ Secuencia Correcta", "#34d399", f"Consent Mode Default (Script #{pos_consent + 1}) se ejecuta antes del script del CMP (Script #{pos_cmp + 1})."))
+        else:
+            orden_items.append(("❌ Riesgo de Carrera", "#ef4444", f"El CMP (Script #{pos_cmp + 1}) carga antes de la declaración default de Consent Mode (Script #{pos_consent + 1}). Puede provocar discrepancias en los primeros pings de telemetría."))
+    elif pos_consent == -1 and is_hardcoded:
+        orden_items.append(("⚠️ Sin Default en Código", "#fbbf24", "No se detecta la llamada gtag('consent', 'default') en el código fuente HTML previo al CMP."))
+        
+    # 2. Consent Mode Default vs GTM
+    if pos_consent != -1 and pos_gtm != -1:
+        if pos_consent < pos_gtm:
+            orden_items.append(("✅ Secuencia Correcta", "#34d399", f"Consent Mode Default se inicializa antes del contenedor de GTM ({', '.join(gtm_ids) or 'GTM'})."))
+        else:
+            orden_items.append(("❌ Infracción / Riesgo Crítico", "#ef4444", f"GTM se carga antes de que Consent Mode fije el estado Default. Las etiquetas de analítica y marketing podrían dispararse sin respetar los estados denegados."))
+
+    # 3. CMP vs GTM
+    if pos_cmp != -1 and pos_gtm != -1:
+        if pos_cmp < pos_gtm:
+            orden_items.append(("ℹ️ Ubicación", "#00f0ff", f"El script del CMP se ubica antes de GTM en {cmp_loc}."))
+        else:
+            orden_items.append(("ℹ️ Ubicación", "#a855f7", f"GTM se ubica antes del script del CMP en {cmp_loc}."))
+
+    if not orden_items:
+        orden_items.append(("ℹ️ Diagnóstico", "#94a3b8", "No se han detectado scripts simultáneos de Consent Mode, CMP y GTM en el HTML base para auditar la secuencia."))
+
+    recomendacion = (
+        "La recomendación técnica principal SIEMPRE es centralizar toda la gestión en Google Tag Manager (GTM). "
+        "Tanto la integración del CMP como la inicialización y actualización de Google Consent Mode deben articularse "
+        "preferentemente mediante la plantilla comunitaria oficial del CMP en GTM. Esto evita discrepancias de orden en el código fuente, "
+        "sincroniza los disparadores con el evento de consentimiento y facilita el mantenimiento unificado de etiquetas."
+    )
+
+    return {
+        "detected_cmp": detected_cmp,
+        "metodo": metodo,
+        "metodo_badge": metodo_badge,
+        "metodo_color": metodo_color,
+        "gtm_ids": gtm_ids if gtm_ids else ["No detectado"],
+        "cmp_loc": cmp_loc,
+        "orden_items": orden_items,
+        "recomendacion": recomendacion
     }
 
 # ==============================================================================
@@ -786,7 +872,7 @@ async def interactuar_con_cmp(page, target_action):
     except Exception as e:
         return f"Error: {e}"
 
-async def auditar_fase(browser, url, action=None):
+async def auditar_fase(browser, url, action=None, inspect_cmp=False):
     context = await browser.new_context()
     page = await context.new_page()
     pings = []
@@ -810,6 +896,95 @@ async def auditar_fase(browser, url, action=None):
     
     await asyncio.sleep(2)
     
+    cmp_tech_info = None
+    raw_html = ""
+    if inspect_cmp:
+        try:
+            raw_html = await page.content()
+            js_inspect = """
+            () => {
+                const cmpSignatures = [
+                    { name: "CookieScript", global: "CookieScript", pattern: /cdn\\.cookie-script\\.com/i },
+                    { name: "OneTrust", global: "OneTrust", pattern: /(cdn\\.cookielaw\\.org|onetrust\\.com)/i },
+                    { name: "Cookiebot", global: "Cookiebot", pattern: /consent\\.cookiebot\\.com/i },
+                    { name: "CookieYes", global: "cookieyes", pattern: /cdn-cookieyes\\.com/i },
+                    { name: "Didomi", global: "Didomi", pattern: /didomi\\.io/i },
+                    { name: "Usercentrics", global: "UC_UI", pattern: /app\\.usercentrics\\.eu/i },
+                    { name: "Axeptio", global: "axeptioSDK", pattern: /axept\\.io/i },
+                    { name: "Iubenda", global: "_iub", pattern: /iubenda_cs/i }
+                ];
+
+                let detectedCmp = "No detectado / Banner a medida";
+                let cmpScriptSrc = null;
+                let cmpElement = null;
+
+                for (const cmp of cmpSignatures) {
+                    if (window[cmp.global]) {
+                        detectedCmp = cmp.name;
+                        break;
+                    }
+                }
+
+                const scripts = Array.from(document.querySelectorAll('script'));
+                scripts.forEach(s => {
+                    const src = s.src || '';
+                    for (const cmp of cmpSignatures) {
+                        if (cmp.pattern.test(src)) {
+                            detectedCmp = cmp.name;
+                            cmpScriptSrc = src;
+                            cmpElement = s;
+                        }
+                    }
+                });
+
+                const gtmScripts = scripts.filter(s => (s.src || '').includes('googletagmanager.com/gtm.js'));
+                const gtmIds = [];
+                gtmScripts.forEach(s => {
+                    const m = (s.src || '').match(/[?&]id=(GTM-[A-Z0-9]+)/);
+                    if (m && !gtmIds.includes(m[1])) gtmIds.push(m[1]);
+                });
+                if (window.google_tag_manager) {
+                    Object.keys(window.google_tag_manager).forEach(k => {
+                        if (k.startsWith('GTM-') && !gtmIds.includes(k)) gtmIds.push(k);
+                    });
+                }
+
+                let consentScript = null;
+                scripts.forEach(s => {
+                    const txt = s.innerText || s.textContent || '';
+                    if (txt.includes('consent') && txt.includes('default')) {
+                        consentScript = s;
+                    }
+                });
+
+                const posConsent = consentScript ? scripts.indexOf(consentScript) : -1;
+                const posCmp = cmpElement ? scripts.indexOf(cmpElement) : -1;
+                const posGtm = gtmScripts.length > 0 ? scripts.indexOf(gtmScripts[0]) : -1;
+
+                let cmpLocation = "No localizado en scripts";
+                if (cmpElement) {
+                    cmpLocation = document.head.contains(cmpElement) ? "<head>" : "<body>";
+                }
+
+                return {
+                    detectedCmp,
+                    cmpScriptSrc,
+                    cmpLocation,
+                    gtmIds,
+                    hasConsentDefaultScript: posConsent !== -1,
+                    order: {
+                        posConsent,
+                        posCmp,
+                        posGtm,
+                        totalScripts: scripts.length
+                    }
+                };
+            }
+            """
+            cmp_tech_info = await page.evaluate(js_inspect)
+        except Exception:
+            pass
+
     action_info = "Sin interacción (Default)"
     if action:
         action_info = await interactuar_con_cmp(page, action)
@@ -817,29 +992,47 @@ async def auditar_fase(browser, url, action=None):
         
     cookies = await context.cookies()
     await context.close()
+    
+    if inspect_cmp:
+        return cookies, pings, action_info, cmp_tech_info, raw_html
     return cookies, pings, action_info
 
 # ==============================================================================
 # GENERACIÓN DE DOCUMENTO WORD
 # ==============================================================================
 
-def generar_documento_word(domain, audit_data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list):
+def generar_documento_word(domain, audit_data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list, cmp_audit):
     doc = Document()
     doc.add_heading('AUDITORÍA TÉCNICA PRIVACY & GOOGLE CONSENT MODE', 0)
     doc.add_paragraph('Octubre 2026')
     doc.add_heading('Introducción.', 1)
-    doc.add_paragraph('Este informe audita el comportamiento técnico de cookies y el envío de señales bajo Google Consent Mode según las directrices de la AEPD y el RGPD.')
+    doc.add_paragraph('Este informe audita el comportamiento técnico de cookies, la implementación del CMP y el envío de señales bajo Google Consent Mode según las directrices de la AEPD y el RGPD.')
     doc.add_paragraph('Dominio evaluado: ' + domain)
     
+    # 1. Auditoría del CMP
+    doc.add_heading('1.- Implementación del CMP y Contenedores', 1)
+    doc.add_paragraph(f"- Plataforma CMP detectada: {cmp_audit['detected_cmp']}")
+    doc.add_paragraph(f"- Método de implementación: {cmp_audit['metodo']}")
+    doc.add_paragraph(f"- Ubicación en el documento: {cmp_audit['cmp_loc']}")
+    doc.add_paragraph(f"- Contenedor(es) Google Tag Manager: {', '.join(cmp_audit['gtm_ids'])}")
+    
+    doc.add_heading('1.1 Auditoría del orden de carga de scripts en código fuente', 2)
+    for estado, _, detalle in cmp_audit['orden_items']:
+        doc.add_paragraph(f"[{estado}] {detalle}")
+        
+    doc.add_heading('1.2 Dictamen y Recomendación Técnica', 2)
+    doc.add_paragraph(cmp_audit['recomendacion'])
+    
+    # 2. Diagnóstico de Google Consent Mode
     diag = diagnosticar_consent_mode(audit_data)
-    doc.add_heading('1.- Google Consent Mode', 1)
-    doc.add_heading('1.1 Diagnóstico de Versión y Tipo de Implementación', 2)
+    doc.add_heading('2.- Google Consent Mode', 1)
+    doc.add_heading('2.1 Diagnóstico de Versión y Tipo de Implementación', 2)
     doc.add_paragraph(f"- Versión detectada: {diag['version']}")
     doc.add_paragraph(f"  Detalle técnico: {diag['desc_ver']}")
     doc.add_paragraph(f"- Modalidad de implementación: {diag['tipo']}")
     doc.add_paragraph(f"  Detalle técnico: {diag['desc_tipo']}")
     
-    doc.add_heading('1.2 Matriz de Parámetros de Consentimiento', 2)
+    doc.add_heading('2.2 Matriz de Parámetros de Consentimiento', 2)
     table = doc.add_table(rows=1, cols=6)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     hdr = table.rows[0].cells
@@ -869,13 +1062,14 @@ def generar_documento_word(domain, audit_data, baseline_names, analytics_new, ma
             params = extract_consent_params(audit_data[f]['pings'])
             row[idx].text = str(extractor(params))
             
-    doc.add_heading('2.- Inventario y Clasificación Forense de Cookies', 1)
+    # 3. Inventario de Cookies
+    doc.add_heading('3.- Inventario y Clasificación Forense de Cookies', 1)
     secciones = [
-        ("2.1 Cookies en Aterrizaje Inicial (Default)", 'default'),
-        ("2.2 Cookies tras Rechazar Todas", 'reject'),
-        ("2.3 Cookies tras Aceptar Todas", 'accept'),
-        ("2.4 Cookies tras Aceptar Solo Analítica", 'analytics'),
-        ("2.5 Cookies tras Aceptar Solo Marketing", 'marketing')
+        ("3.1 Cookies en Aterrizaje Inicial (Default)", 'default'),
+        ("3.2 Cookies tras Rechazar Todas", 'reject'),
+        ("3.3 Cookies tras Aceptar Todas", 'accept'),
+        ("3.4 Cookies tras Aceptar Solo Analítica", 'analytics'),
+        ("3.5 Cookies tras Aceptar Solo Marketing", 'marketing')
     ]
     for tit, k in secciones:
         doc.add_heading(tit, 2)
@@ -923,8 +1117,10 @@ if "audit_data" not in st.session_state:
     st.session_state.audit_data = None
 if "domain" not in st.session_state:
     st.session_state.domain = ""
+if "cmp_audit" not in st.session_state:
+    st.session_state.cmp_audit = None
 if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "📊 Google Consent Mode"
+    st.session_state.active_tab = "🛠️ Implementación CMP"
 
 c_input, c_btn = st.columns([4, 1])
 with c_input:
@@ -943,8 +1139,8 @@ if btn_start:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
                 
-                progreso.progress(10, text="[1/5] Fase 1: Estado Default (Cookieless pings y cookies base)...")
-                c_def, p_def, a_def = await auditar_fase(browser, target_url, action=None)
+                progreso.progress(10, text="[1/5] Fase 1: Estado Default, detección de CMP y orden de scripts...")
+                c_def, p_def, a_def, cmp_info, raw_html = await auditar_fase(browser, target_url, action=None, inspect_cmp=True)
                 
                 progreso.progress(30, text="[2/5] Fase 2: Rechazar Todas (Verificando bloqueo)...")
                 c_rej, p_rej, a_rej = await auditar_fase(browser, target_url, action="reject")
@@ -961,23 +1157,29 @@ if btn_start:
                 await browser.close()
                 progreso.progress(100, text="¡Telemetría finalizada con éxito!")
                 
+                cmp_audit_result = analizar_implementacion_cmp(cmp_info or {}, raw_html)
+                
                 return {
                     "default": {"cookies": c_def, "pings": p_def, "action": a_def},
                     "reject": {"cookies": c_rej, "pings": p_rej, "action": a_rej},
                     "accept": {"cookies": c_acc, "pings": p_acc, "action": a_acc},
                     "analytics": {"cookies": c_ana, "pings": p_ana, "action": a_ana},
                     "marketing": {"cookies": c_mkt, "pings": p_mkt, "action": a_mkt}
-                }
+                }, cmp_audit_result
 
         try:
-            st.session_state.audit_data = asyncio.run(ejecutar_pruebas())
+            audit_res, cmp_res = asyncio.run(ejecutar_pruebas())
+            st.session_state.audit_data = audit_res
+            st.session_state.cmp_audit = cmp_res
             progreso.empty()
         except Exception as e:
             st.error(f"Error durante el análisis: {e}")
 
-if st.session_state.audit_data:
+if st.session_state.audit_data and st.session_state.cmp_audit:
     data = st.session_state.audit_data
     domain = st.session_state.domain
+    cmp_audit = st.session_state.cmp_audit
+    
     st.markdown(f"<div style='margin-bottom: 20px; font-weight: 600; color: #34d399;'>● Auditoría completada para: <span style='color: #ffffff;'>{domain}</span></div>", unsafe_allow_html=True)
     
     # Análisis diferencial de cookies
@@ -991,8 +1193,8 @@ if st.session_state.audit_data:
     # Diagnóstico global de Consent Mode
     diag = diagnosticar_consent_mode(data)
     
-    # Selector de pestañas persistente de alto contraste
-    tab_options = ["📊 Google Consent Mode", "🍪 Cookies por Sección", "📄 Generar Informe Word"]
+    # Selector de pestañas persistente de alto contraste (4 Secciones completas)
+    tab_options = ["🛠️ Implementación CMP", "📊 Google Consent Mode", "🍪 Cookies por Sección", "📄 Generar Informe Word"]
     selected_tab = st.radio(
         "Navegación:",
         tab_options,
@@ -1002,7 +1204,74 @@ if st.session_state.audit_data:
         key="active_tab"
     )
     
-    if selected_tab == "📊 Google Consent Mode":
+    # ==========================================================================
+    # PESTAÑA 1: IMPLEMENTACIÓN Y ORDEN DE SCRIPTS DE CMP
+    # ==========================================================================
+    if selected_tab == "🛠️ Implementación CMP":
+        st.markdown("<h3 style='margin-bottom: 14px;'>Detección y Arquitectura Técnica del CMP</h3>", unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"""
+            <div class="cyber-panel">
+                <div class="cyber-panel-title">Plataforma CMP</div>
+                <div class="cyber-panel-val" style="font-size: 1.5rem;">{cmp_audit['detected_cmp']}</div>
+                <div class="cyber-badge-ok">● Detectado en ejecución</div>
+                <div class="cyber-action">Ubicación script: {cmp_audit['cmp_loc']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with c2:
+            st.markdown(f"""
+            <div class="cyber-panel">
+                <div class="cyber-panel-title">Método de Integración</div>
+                <div class="cyber-panel-val" style="font-size: 1.35rem; color: {cmp_audit['metodo_color']};">{cmp_audit['metodo_badge']}</div>
+                <div class="cyber-badge-warn" style="color: {cmp_audit['metodo_color']}; border-color: {cmp_audit['metodo_color']};">
+                    {cmp_audit['metodo']}
+                </div>
+                <div class="cyber-action">Inspección DOM / HTML fuente</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with c3:
+            gtm_display = ", ".join(cmp_audit['gtm_ids'])
+            st.markdown(f"""
+            <div class="cyber-panel">
+                <div class="cyber-panel-title">Google Tag Manager</div>
+                <div class="cyber-panel-val" style="font-size: 1.4rem; color: #34d399;">{gtm_display}</div>
+                <div class="cyber-badge-ok">● Contenedor Activo</div>
+                <div class="cyber-action">Telemetría de contenedor gtm.js</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown("<h4 style='color: #ffffff; margin-top: 14px;'>Auditoría de Orden de Carga de Scripts</h4>", unsafe_allow_html=True)
+        for estado, color, detalle in cmp_audit['orden_items']:
+            st.markdown(f"""
+            <div style="background: #0f1626; border-left: 4px solid {color}; border-top: 1px solid #1e293b; border-right: 1px solid #1e293b; border-bottom: 1px solid #1e293b; border-radius: 6px; padding: 12px 18px; margin-bottom: 10px;">
+                <span style="color: {color}; font-weight: 700; margin-right: 8px;">{estado}:</span>
+                <span style="color: #e2e8f0; font-size: 0.92rem;">{detalle}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        # Banner de Recomendación Estratégica (SIEMPRE centralizar en GTM)
+        st.markdown(f"""
+        <div class="rec-box">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <span style="font-size: 1.3rem;">💡</span>
+                <span style="color: #00f0ff; font-weight: 800; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Recomendación Principal de Auditoría (Estándar AEPD / Google)
+                </span>
+            </div>
+            <p style="color: #f1f5f9; font-size: 0.92rem; line-height: 1.6; margin: 0;">
+                {cmp_audit['recomendacion']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ==========================================================================
+    # PESTAÑA 2: GOOGLE CONSENT MODE
+    # ==========================================================================
+    elif selected_tab == "📊 Google Consent Mode":
         st.markdown("<h3 style='margin-bottom: 14px;'>Diagnóstico Global de Consent Mode</h3>", unsafe_allow_html=True)
         
         c_diag1, c_diag2 = st.columns(2)
@@ -1099,6 +1368,9 @@ if st.session_state.audit_data:
             hide_index=True
         )
 
+    # ==========================================================================
+    # PESTAÑA 3: COOKIES POR SECCIÓN
+    # ==========================================================================
     elif selected_tab == "🍪 Cookies por Sección":
         st.markdown("<h3 style='margin-bottom: 14px;'>Inventario Forense Diferencial y Diagnóstico Legal</h3>", unsafe_allow_html=True)
         sec_names = {
@@ -1161,10 +1433,13 @@ if st.session_state.audit_data:
         else:
             st.info("No hay cookies guardadas en esta fase.")
 
+    # ==========================================================================
+    # PESTAÑA 4: GENERAR INFORME WORD
+    # ==========================================================================
     elif selected_tab == "📄 Generar Informe Word":
         st.markdown("<h3 style='margin-bottom: 14px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;'>Exporta el informe en formato Word (.docx) estructurado según el estándar de auditoría de privacidad, con el diagnóstico de Consent Mode (v1/v2, Básica/Avanzada) y la tabla forense de cookies.</p>", unsafe_allow_html=True)
-        doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list)
+        st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;'>Exporta el informe en formato Word (.docx) estructurado según el estándar oficial de auditoría de privacidad: incluye la arquitectura técnica del CMP, el orden de scripts en código fuente, la telemetría de Consent Mode y la matriz forense diferencial de cookies.</p>", unsafe_allow_html=True)
+        doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list, cmp_audit)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(
             label=f"📥 Descargar Informe Completo (.docx)",

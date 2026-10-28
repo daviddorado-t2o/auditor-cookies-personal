@@ -17,21 +17,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos visuales Cybersecurity Dark Mode
+# Estilos visuales Cybersecurity Dark Mode con Alto Contraste
 st.markdown("""
 <style>
+/* Fondo general y tipografía */
 .stApp {
-    background-color: #0a0d14;
+    background-color: #07090e;
     color: #e2e8f0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+/* Encabezados y títulos con máximo contraste */
 h1, h2, h3, h4 {
-    color: #f8fafc !important;
+    color: #ffffff !important;
     font-weight: 700;
     letter-spacing: -0.5px;
 }
+
+/* Tarjetas Cybersecurity */
 .cyber-panel {
-    background: #111726;
+    background: #0f1626;
     border: 1px solid #1e293b;
     border-radius: 10px;
     padding: 16px;
@@ -49,7 +54,7 @@ h1, h2, h3, h4 {
     text-transform: uppercase;
     letter-spacing: 1px;
     color: #94a3b8;
-    font-weight: 600;
+    font-weight: 700;
     margin-bottom: 6px;
 }
 .cyber-panel-val {
@@ -60,28 +65,28 @@ h1, h2, h3, h4 {
 }
 .cyber-badge-ok {
     display: inline-block;
-    background: rgba(16, 185, 129, 0.15);
+    background: rgba(16, 185, 129, 0.18);
     color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    border: 1px solid rgba(16, 185, 129, 0.4);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     margin-top: 6px;
 }
 .cyber-badge-warn {
     display: inline-block;
-    background: rgba(245, 158, 11, 0.15);
+    background: rgba(245, 158, 11, 0.18);
     color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    border: 1px solid rgba(245, 158, 11, 0.4);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     margin-top: 6px;
 }
 .cyber-console {
-    background: #070a10;
+    background: #05070b;
     border: 1px solid #1b2438;
     border-radius: 6px;
     padding: 8px;
@@ -92,14 +97,14 @@ h1, h2, h3, h4 {
     word-break: break-all;
 }
 .cyber-action {
-    font-size: 0.7rem;
-    color: #64748b;
+    font-size: 0.72rem;
+    color: #8194ad;
     margin-top: 6px;
 }
 
 /* Tarjeta de Diagnóstico Ejecutiva */
 .diag-container {
-    background: #111726;
+    background: #0f1626;
     border: 1px solid #1e293b;
     border-radius: 12px;
     padding: 20px;
@@ -109,22 +114,22 @@ h1, h2, h3, h4 {
 .diag-title {
     font-size: 1rem;
     font-weight: 700;
-    color: #f8fafc;
+    color: #ffffff;
     margin-bottom: 12px;
 }
 .diag-badge {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 6px;
     font-size: 0.85rem;
-    font-weight: 700;
-    margin-bottom: 8px;
+    font-weight: 800;
+    margin-bottom: 10px;
 }
 
 /* Inputs de texto */
 .stTextInput > div > div > input {
-    background-color: #111726 !important;
-    color: #f8fafc !important;
+    background-color: #0f1626 !important;
+    color: #ffffff !important;
     border: 1px solid #23304a !important;
     border-radius: 8px !important;
     font-size: 0.95rem;
@@ -152,45 +157,82 @@ h1, h2, h3, h4 {
     color: #000000 !important;
 }
 
-/* Pestañas persistentes con st.radio horizontal */
+/* ==================================================================== */
+/* SISTEMA DE PESTAÑAS (st.radio) DE ALTO CONTRASTE */
+/* ==================================================================== */
+div[data-testid="stRadio"] > label {
+    display: none !important;
+}
 div[data-testid="stRadio"] > div {
     display: flex;
     flex-direction: row;
-    gap: 10px;
+    gap: 12px;
     border-bottom: 1px solid #1e293b;
-    padding-bottom: 12px;
+    padding-bottom: 14px;
     margin-bottom: 24px;
+    background: transparent;
 }
-div[data-testid="stRadio"] label {
-    background-color: #111726;
-    border: 1px solid #1e293b;
-    border-radius: 8px 8px 0 0;
-    padding: 10px 22px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-}
-div[data-testid="stRadio"] label:hover {
-    border-color: #00f0ff;
-    color: #00f0ff;
-}
-div[data-testid="stRadio"] label[data-checked="true"],
-div[data-testid="stRadio"] label:has(input:checked) {
-    background-color: #162035 !important;
-    border-color: #00f0ff !important;
-    color: #00f0ff !important;
-    box-shadow: 0 -2px 10px rgba(0, 240, 255, 0.2);
-}
-div[data-testid="stRadio"] input[type="radio"] {
+/* Ocultar círculo de radio nativo */
+div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {
     display: none !important;
 }
-div[data-testid="stRadio"] span[data-testid="stMarkdownContainer"] p {
-    font-weight: 700;
-    font-size: 0.95rem;
-    margin: 0;
+div[data-testid="stRadio"] div[role="radiogroup"] > label {
+    background-color: #0f1626 !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 8px !important;
+    padding: 10px 24px !important;
+    cursor: pointer !important;
+    transition: all 0.25s ease !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+    border-color: #00f0ff !important;
+    background-color: #162035 !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label:hover p {
+    color: #00f0ff !important;
+}
+/* TEXTO PESTAÑA INACTIVA - Blanco / Plata de Alto Contraste */
+div[data-testid="stRadio"] div[role="radiogroup"] > label p {
+    color: #e2e8f0 !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    margin: 0 !important;
+    letter-spacing: 0.3px !important;
+}
+/* PESTAÑA ACTIVA - Resplandor Cian */
+div[data-testid="stRadio"] div[role="radiogroup"] > label[data-checked="true"],
+div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+    background-color: #162035 !important;
+    border: 1px solid #00f0ff !important;
+    box-shadow: 0 0 16px rgba(0, 240, 255, 0.3) !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label[data-checked="true"] p,
+div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) p {
+    color: #00f0ff !important;
 }
 
+/* ==================================================================== */
+/* SELECTBOX Y LABELS DE ALTO CONTRASTE */
+/* ==================================================================== */
+div[data-testid="stSelectbox"] label p {
+    color: #cbd5e1 !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+}
+div[data-testid="stSelectbox"] > div > div {
+    background-color: #0f1626 !important;
+    border: 1px solid #23304a !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+}
+div[data-testid="stSelectbox"] svg {
+    fill: #00f0ff !important;
+}
+
+/* Dataframe */
 div[data-testid="stDataFrame"] {
     border: 1px solid #1e293b;
     border-radius: 8px;
@@ -873,7 +915,7 @@ def generar_documento_word(domain, audit_data, baseline_names, analytics_new, ma
 # ==============================================================================
 
 st.markdown("<h1 style='margin-bottom: 2px;'>🛡️ Privacy & Google Consent Mode Auditor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #64748b; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense mediante Open Cookie Database y señales Google Consent Mode</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #94a3b8; font-size: 0.95rem; margin-bottom: 24px;'>Sistema automatizado de telemetría de privacidad, clasificación forense mediante Open Cookie Database y señales Google Consent Mode</p>", unsafe_allow_html=True)
 
 exact_db, wildcard_list = obtener_base_datos_global()
 
@@ -936,7 +978,7 @@ if btn_start:
 if st.session_state.audit_data:
     data = st.session_state.audit_data
     domain = st.session_state.domain
-    st.markdown(f"<div style='margin-bottom: 20px; font-weight: 600; color: #34d399;'>● Auditoría completada para: <span style='color: #f8fafc;'>{domain}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-bottom: 20px; font-weight: 600; color: #34d399;'>● Auditoría completada para: <span style='color: #ffffff;'>{domain}</span></div>", unsafe_allow_html=True)
     
     # Análisis diferencial de cookies
     def_names = {c['name'] for c in data['default']['cookies']}
@@ -949,7 +991,7 @@ if st.session_state.audit_data:
     # Diagnóstico global de Consent Mode
     diag = diagnosticar_consent_mode(data)
     
-    # Selector de pestañas persistente (evita reseteos de pantalla al cambiar selectboxes)
+    # Selector de pestañas persistente de alto contraste
     tab_options = ["📊 Google Consent Mode", "🍪 Cookies por Sección", "📄 Generar Informe Word"]
     selected_tab = st.radio(
         "Navegación:",
@@ -961,17 +1003,17 @@ if st.session_state.audit_data:
     )
     
     if selected_tab == "📊 Google Consent Mode":
-        st.markdown("### Diagnóstico Global de Consent Mode")
+        st.markdown("<h3 style='margin-bottom: 14px;'>Diagnóstico Global de Consent Mode</h3>", unsafe_allow_html=True)
         
         c_diag1, c_diag2 = st.columns(2)
         with c_diag1:
             st.markdown(f"""
             <div class="diag-container">
                 <div class="diag-title">Versión de Google Consent Mode</div>
-                <div class="diag-badge" style="background: rgba(52, 211, 153, 0.15); color: {diag['badge_ver_color']}; border: 1px solid {diag['badge_ver_color']};">
+                <div class="diag-badge" style="background: rgba(52, 211, 153, 0.18); color: {diag['badge_ver_color']}; border: 1px solid {diag['badge_ver_color']};">
                     ● {diag['version']} ({diag['badge_ver']})
                 </div>
-                <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.5; margin: 0;">
+                <p style="color: #cbd5e1; font-size: 0.88rem; line-height: 1.55; margin: 0;">
                     {diag['desc_ver']}
                 </p>
             </div>
@@ -981,16 +1023,16 @@ if st.session_state.audit_data:
             st.markdown(f"""
             <div class="diag-container">
                 <div class="diag-title">Modo de Implementación</div>
-                <div class="diag-badge" style="background: rgba(0, 240, 255, 0.15); color: {diag['badge_tipo_color']}; border: 1px solid {diag['badge_tipo_color']};">
+                <div class="diag-badge" style="background: rgba(0, 240, 255, 0.18); color: {diag['badge_tipo_color']}; border: 1px solid {diag['badge_tipo_color']};">
                     ● {diag['tipo']}
                 </div>
-                <p style="color: #cbd5e1; font-size: 0.85rem; line-height: 1.5; margin: 0;">
+                <p style="color: #cbd5e1; font-size: 0.88rem; line-height: 1.55; margin: 0;">
                     {diag['desc_tipo']}
                 </p>
             </div>
             """, unsafe_allow_html=True)
             
-        st.markdown("### Telemetría de Señales (5 Fases)")
+        st.markdown("<h3 style='margin-bottom: 14px;'>Telemetría de Señales (5 Fases)</h3>", unsafe_allow_html=True)
         cols = st.columns(5)
         fases = [
             ("1. Default", 'default', "G100"),
@@ -1022,7 +1064,7 @@ if st.session_state.audit_data:
                 """
                 st.markdown(panel_html, unsafe_allow_html=True)
                 
-        st.markdown("<br><h4 style='color: #cbd5e1;'>Matriz de Decodificación de Parámetros GCM</h4>", unsafe_allow_html=True)
+        st.markdown("<br><h4 style='color: #ffffff;'>Matriz de Decodificación de Parámetros GCM</h4>", unsafe_allow_html=True)
         
         table_rows = []
         param_keys = [
@@ -1058,7 +1100,7 @@ if st.session_state.audit_data:
         )
 
     elif selected_tab == "🍪 Cookies por Sección":
-        st.markdown("### Inventario Forense Diferencial y Diagnóstico Legal")
+        st.markdown("<h3 style='margin-bottom: 14px;'>Inventario Forense Diferencial y Diagnóstico Legal</h3>", unsafe_allow_html=True)
         sec_names = {
             "default": "1. Aterrizaje Inicial (Default)",
             "reject": "2. Tras Rechazar Todas",
@@ -1079,12 +1121,26 @@ if st.session_state.audit_data:
         
         col_m1, col_m2 = st.columns([1, 4])
         with col_m1:
-            st.metric("Total Cookies", len(c_list))
+            st.markdown(f"""
+            <div style="background: #0f1626; border: 1px solid #1e293b; border-radius: 10px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+                <div style="color: #94a3b8; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px;">Total Cookies</div>
+                <div style="color: #00f0ff; font-size: 2.2rem; font-weight: 800; font-family: 'Courier New', monospace; line-height: 1.1;">{len(c_list)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
         with col_m2:
             if total_infracciones > 0:
-                st.markdown(f"<div style='margin-top: 14px; padding: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #f87171; font-weight: 600;'>⚠️ Se han detectado {total_infracciones} cookies en presunta infracción (instaladas sin el consentimiento legal exigido).</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div style="padding: 14px 18px; background: rgba(239, 68, 68, 0.14); border: 1px solid #ef4444; border-radius: 10px; color: #fca5a5; font-weight: 600; font-size: 0.92rem; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.2rem;">⚠️</span> Se han detectado {total_infracciones} cookies en presunta infracción (instaladas sin el consentimiento legal exigido).
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.markdown("<div style='margin-top: 14px; padding: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: #34d399; font-weight: 600;'>✅ No se detectan anomalías de consentimiento en las cookies de esta fase.</div>", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="padding: 14px 18px; background: rgba(16, 185, 129, 0.14); border: 1px solid #10b981; border-radius: 10px; color: #6ee7b7; font-weight: 600; font-size: 0.92rem; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.2rem;">✅</span> No se detectan anomalías de consentimiento en las cookies de esta fase.
+                </div>
+                """, unsafe_allow_html=True)
 
         st.write("")
         if enriched_cookies:
@@ -1106,8 +1162,8 @@ if st.session_state.audit_data:
             st.info("No hay cookies guardadas en esta fase.")
 
     elif selected_tab == "📄 Generar Informe Word":
-        st.markdown("### Generación y Descarga de Informe Oficial")
-        st.markdown("<p style='color: #94a3b8;'>Exporta el informe en formato Word (.docx) estructurado según el estándar de auditoría de privacidad, con el diagnóstico de Consent Mode (v1/v2, Básica/Avanzada) y la tabla forense de cookies.</p>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-bottom: 14px;'>Generación y Descarga de Informe Oficial</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;'>Exporta el informe en formato Word (.docx) estructurado según el estándar de auditoría de privacidad, con el diagnóstico de Consent Mode (v1/v2, Básica/Avanzada) y la tabla forense de cookies.</p>", unsafe_allow_html=True)
         doc_bytes = generar_documento_word(domain, data, baseline_names, analytics_new, marketing_new, exact_db, wildcard_list)
         nombre_archivo = f"{domain} - Auditoría cookies y CMP.docx"
         st.download_button(
